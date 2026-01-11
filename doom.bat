@@ -68,7 +68,6 @@ for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
     set "line=%%M"
     if "!line!"=="" (
         set /a block+=1
-        REM Platzhalter für Leerzeile in Spalte 4, damit der Block rutscht
         set /a idx4+=1
         set "col4[!idx4!]=EMPTY"
         set "col4_block[!idx4!]=!block!"
@@ -99,14 +98,12 @@ for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
     )
 )
 
-REM --- 2. Maximale Zeilenanzahl sicher ermitteln ---
 set "maxIdx=25"
 if !idx1! GTR !maxIdx! set "maxIdx=!idx1!"
 if !idx2! GTR !maxIdx! set "maxIdx=!idx2!"
 if !idx3! GTR !maxIdx! set "maxIdx=!idx3!"
 if !idx4! GTR !maxIdx! set "maxIdx=!idx4!"
 
-REM --- 3. Anzeige-Schleife ---
 for /L %%i in (1,1,!maxIdx!) do (
     set "c1=!col1[%%i]!                                           "
     set "c2=!col2[%%i]!                                                                      "
@@ -114,13 +111,11 @@ for /L %%i in (1,1,!maxIdx!) do (
     set "c4_raw=!col4[%%i]!"
     set "b4=!col4_block[%%i]!"
 
-    REM Farbe für Spalte 4 bestimmen
     set "color4=%G%"
     if "!b4!"=="3" set "color4=%Y%"
     if "!b4!"=="4" set "color4=%CY%"
     if "!b4!"=="5" set "color4=%W%"
 
-    REM Anzeige-Variable für Spalte 4 vorbereiten
     set "display4="
     if not "!c4_raw!"=="" (
         if "!c4_raw!"=="EMPTY" (
@@ -130,7 +125,6 @@ for /L %%i in (1,1,!maxIdx!) do (
         )
     )
 
-    REM WICHTIG: !display4! muss in der Ausgabe stehen
     echo    %R%!c1:~0,42! %GRA%^|%G% !c2:~0,70! %GRA%^|%G% !c3:~0,70! %GRA%^| !display4!
 )
 
@@ -201,7 +195,7 @@ for %%p in (!remaining!) do (
         if exist "mods\!item!\" (
             set "autoMod=!item!"
         ) else (
-            REM Normaler PWAD/IWAD Pfad-Check
+            REM PWAD/IWAD Pfad-Check
             set "tPath="
             if exist "%PWAD_DIR%\!item!" (set "tPath=%PWAD_DIR%\!item!") else (if exist "%IWAD_DIR%\!item!" (set "tPath=%IWAD_DIR%\!item!"))
             if defined tPath (
@@ -215,7 +209,6 @@ for %%p in (!remaining!) do (
     )
 )
 
-REM --- Mod-Entscheidung mit Auto-Mod Funktion ---
 if defined autoMod (
     set "modName=!autoMod! (Auto)"
     set "modParam="
@@ -245,14 +238,12 @@ for /d %%D in (mods\*) do (
     set "skip=0"
     set "isSpecial=0"
     
-    REM 1. Prüfen auf Hexen
     echo !folder! | findstr /i "hexen" >nul
     if !errorlevel! EQU 0 (
         set "isSpecial=1"
         if /i not "!core!"=="hexen.wad" set "skip=1"
     )
     
-    REM 2. Prüfen auf Heretic
     echo !folder! | findstr /i "heretic" >nul
     if !errorlevel! EQU 0 (
         set "isSpecial=1"
@@ -264,7 +255,6 @@ for /d %%D in (mods\*) do (
         set "skip=1"
     )
 
-    REM 4. Doom-Mods (isSpecial=0) bei Hexen/Heretic ausblenden
     if /i "!core!"=="hexen.wad" if "!isSpecial!"=="0" set "skip=1"
     if /i "!core!"=="heretic.wad" if "!isSpecial!"=="0" set "skip=1"
     
@@ -326,7 +316,6 @@ echo %indent%%line%
 echo %indent%%Y%Drücke eine Taste für das Hauptmenü...%W%
 pause >nul
 
-REM --- ABSOLUTE REINIGUNG ---
 for %%v in (mapname core displayCore modName modParam fileParams extraParams mapData remaining found modChoice targetPath item firstChar block line M folder skip isSpecial) do set "%%v="
 for /L %%i in (1,1,300) do ( set "col1[%%i]=" & set "col2[%%i]=" & set "col3[%%i]=" & set "col4[%%i]=" & set "tempPWAD[%%i]=" )
 goto map_selection
