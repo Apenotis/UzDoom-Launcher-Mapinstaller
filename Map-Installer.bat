@@ -18,7 +18,6 @@ echo %B%------------------------------------------------------%W%
 echo                  %CY%DOOM MAP INSTALLER%W%
 echo %B%------------------------------------------------------%W%
 echo.
-
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
 set "found_files=0"
@@ -54,23 +53,26 @@ if "%zip_found%"=="1" (
 
 REM --- Ordner verarbeiten ---
 for /d %%D in ("%INSTALL_DIR%\*") do (
-    set "m_name=" & set "m_iwad="
+    set "m_name="
+    set "m_iwad="
     set "m_fold=%%~nxD"
     set "m_fold=!m_fold: =!"
-    
-    echo %Y%VERARBEITE ORDNER:%W% %CY%%%~nxD%W%
-    
-    REM Automatisches Auslesen des Titels und der IWAD aus .txt Dateien
-    for %%F in ("%%~fD\*.txt") do (
+    set "currentFullDir=%%~fD"
+
+    echo %Y%ÜBERPRÜFE STRUKTUR:%W% %CY%!m_fold!%W%
+
+    pushd "!currentFullDir!"
+    for /r %%F in (*.txt) do (
         if "!m_name!"=="" (
             for /f "usebackq tokens=*" %%A in (`powershell -command "$c = Get-Content '%%~fF'; $line = $c | Select-String 'Title\s*:' | Select-Object -First 1; if($line){ $val = $line.ToString().Split(':',2)[1].Trim(); (Get-Culture).TextInfo.ToTitleCase($val.ToLower()) }"`) do set "m_name=%%A"
         )
         if "!m_iwad!"=="" (
-            for /f "usebackq tokens=*" %%G in (`powershell -command "$c = Get-Content '%%~fF'; $line = $c | Select-String 'Game\s*:' | Select-Object -First 1; if($line){ $v = $line.ToString().Split(':',2)[1].Trim().ToLower(); if($v -eq 'doom'){ 'doom.wad' } elseif($v -match 'doom2'){ 'doom2.wad' } }"`) do set "m_iwad=%%G"
+            for /f "usebackq tokens=*" %%G in (`powershell -command "$c = Get-Content '%%~fF'; $line = $c | Select-String 'Game\s*:' | Select-Object -First 1; if($line){ $v = $line.ToString().Split(':',2)[1].Trim().ToLower(); if($v -match 'heretic'){ 'heretic.wad' } elseif($v -match 'hexen'){ 'hexen.wad' } elseif($v -match 'doom2'){ 'doom2.wad' } elseif($v -match 'doom'){ 'doom.wad' } }"`) do set "m_iwad=%%G"
         )
     )
+    popd
 
-    if "!m_name!"=="" set "m_name=%%~nxD"
+    if "!m_name!"=="" set "m_name=!m_fold!"
     set "targetPath=%PWAD_BASE%\!m_fold!"
     set "alreadyExists=0"
 
@@ -79,18 +81,22 @@ for /d %%D in ("%INSTALL_DIR%\*") do (
     if exist "!targetPath!" set "alreadyExists=1"
 
     if "!alreadyExists!"=="1" (
-        echo    %Y%-- Karte bereits vorhanden. Überspringe...%W%
+        echo   %Y%-- Karte bereits vorhanden. Überspringe...%W%
     ) else (
-        REM Nur wenn PowerShell nichts gefunden hat, manuell fragen
         if "!m_iwad!"=="" call :manual_selector "!m_name!"
-        
         if not exist "!targetPath!" mkdir "!targetPath!"
-        move /y "%%~fD\*.*" "!targetPath!\" >nul 2>&1
+        
+        echo     %GRA%-- Sammle Dateien aus Unterordnern...%W%
+        pushd "!currentFullDir!"
+        for /r %%f in (*.wad *.pk3 *.txt *.deh *.bex) do (
+            move /y "%%f" "..\..\!targetPath!\" >nul 2>&1
+        )
+        popd
         
         call :update_db "!m_name!" "!m_iwad!" "!m_fold!"
-        echo    %G%-- Trage Karteninformation in die csv ein: %W%[!id!, !m_iwad!, !m_name!, !m_fold!\]
+        echo    %G%-- Erfolg: !id! - !m_name! installiert.%W%
     )
-    rd /s /q "%%~fD"
+    rd /s /q "!currentFullDir!" 2>nul
 )
 
 REM --- Einzeldateien (.wad/.pk3) verarbeiten ---
@@ -124,43 +130,70 @@ pause
 exit /b
 
 :manual_selector
-echo   %R%-- IWAD-Wahl erforderlich für: %CY%%~1%W%
+echo   %R%-- IWAD-Wahl erforderlich für: %CY% %~1%W%
+echo.
+echo       1: Doom 1 (doom.wad)
+echo       2: Doom 2 (doom2.wad)
+echo       3: Heretic (heretic.wad)
+echo       4: Hexen (hexen.wad)
+echo       5: Plutonia (plutonia.wad)
+echo       6: TNT (tnt.wad)
+echo.
 set "choice=2"
-set /p "choice=      1:Doom1  2:Doom2  3:Plutonia  4:TNT (Standard: 2): "
-if "!choice!"=="1" (set "m_iwad=doom.wad") else if "!choice!"=="3" (set "m_iwad=plutonia.wad") else if "!choice!"=="4" (set "m_iwad=tnt.wad") else (set "m_iwad=doom2.wad")
+set /p "choice=      Auswahl (Standard: 2): "
+if "!choice!"=="1" (set "m_iwad=doom.wad") else if "!choice!"=="3" (set "m_iwad=heretic.wad") else if "!choice!"=="4" (set "m_iwad=hexen.wad") else if "!choice!"=="5" (set "m_iwad=plutonia.wad") else if "!choice!"=="6" (set "m_iwad=tnt.wad") else (set "m_iwad=doom2.wad")
 exit /b
 
 :update_db
-set "id=0"
-for /f "tokens=1 delims=," %%I in ('type "%CSV_FILE%"') do (
-    set /a "val=%%I" 2>nul
-    if !val! GTR !id! set "id=!val!"
+set "blockTarget=2"
+set "prefix="
+if /i "%~2"=="heretic.wad" (set "blockTarget=3" & set "prefix=h")
+if /i "%~2"=="hexen.wad"   (set "blockTarget=4" & set "prefix=hx")
+
+set "newNum=0"
+set "currentB=1"
+for /f "usebackq tokens=1* delims=:" %%A in (`findstr /n "^" "%CSV_FILE%"`) do (
+    set "ln=%%B"
+    if "!ln!"=="" (
+        set /a currentB+=1
+    ) else (
+        if !currentB! EQU !blockTarget! (
+            for /f "tokens=1 delims=," %%I in ("!ln!") do (
+                set "idStr=%%I"
+                if defined prefix (
+                    set "numOnly=!idStr:%prefix%=!"
+                    set /a "numOnly=!numOnly!" 2>nul
+                    if !numOnly! GTR !newNum! set "newNum=!numOnly!"
+                ) else (
+                    set /a "numOnly=!idStr!" 2>nul
+                    if !numOnly! GTR !newNum! set "newNum=!numOnly!"
+                )
+            )
+        )
+    )
 )
-set /a id+=1
+set /a newNum+=1
+set "id=!prefix!!newNum!"
 
 set "tmpCSV=%CSV_FILE%.tmp"
-set "targetLine=0"
-
-REM Sucht die letzte Leerzeile (Trennlinie zum 3. Block)
-for /f "tokens=1 delims=:" %%A in ('findstr /n "^$" "%CSV_FILE%"') do set "targetLine=%%A"
-
-if !targetLine! EQU 0 (
-    echo !id!,%~2,%~1,0,%~3\ >> "%CSV_FILE%"
-) else (
-    (for /f "usebackq tokens=1* delims=:" %%A in (`findstr /n "^" "%CSV_FILE%"`) do (
-        if %%A EQU !targetLine! echo !id!,%~2,%~1,0,%~3\
-        echo(%%B
-    )) > "%tmpCSV%"
-    move /y "%tmpCSV%" "%CSV_FILE%" >nul
-)
+set "currentB=1"
+(
+    for /f "usebackq tokens=1* delims=:" %%A in (`findstr /n "^" "%CSV_FILE%"`) do (
+        set "ln=%%B"
+        if "!ln!"=="" (
+            if !currentB! EQU !blockTarget! echo !id!,%~2,%~1,0,%~3\
+            set /a currentB+=1
+        )
+        echo(!ln!
+    )
+) > "%tmpCSV%"
+move /y "%tmpCSV%" "%CSV_FILE%" >nul
 exit /b
 
 :restore_logic
 if exist "%CSV_FILE%.bak" (
     copy /y "%CSV_FILE%.bak" "%CSV_FILE%" >nul
     echo %G%Backup erfolgreich wiederhergestellt.%W%
-) else (
-    echo %R%Kein Backup gefunden.%W%
-)
+) else (echo %R%Kein Backup gefunden.%W%)
 pause
 goto :main_menu

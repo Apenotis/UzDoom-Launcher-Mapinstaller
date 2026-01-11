@@ -60,45 +60,78 @@ if not exist "%CSV_FILE%" (
     exit
 )
 
+set "block=1"
+set "pCount=0"
+set "idx1=0" & set "idx2=0" & set "idx3=0" & set "idx4=0"
+
 for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
     set "line=%%M"
     if "!line!"=="" (
         set /a block+=1
+        REM Platzhalter für Leerzeile in Spalte 4, damit der Block rutscht
+        set /a idx4+=1
+        set "col4[!idx4!]=EMPTY"
+        set "col4_block[!idx4!]=!block!"
     ) else (
         if /i not "!line:~0,2!"=="ID" (
             for /f "tokens=1,2,3 delims=," %%a in ("!line!") do (
                 set "entry=%%a - %%c"
-                if !block!==1 (
+                if !block! EQU 1 (
                     set /a idx1+=1
                     set "col1[!idx1!]=!entry!"
-                ) else if !block!==2 (
-                    set /a tempPWAD_idx+=1
-                    set "tempPWAD[!tempPWAD_idx!]=!entry!"
+                ) else if !block! EQU 2 (
+                    set /a pCount+=1
+                    set /a "mod=!pCount! %% 2"
+                    if !mod! EQU 1 (
+                        set /a idx2+=1
+                        set "col2[!idx2!]=!entry!"
+                    ) else (
+                        set /a idx3+=1
+                        set "col3[!idx3!]=!entry!"
+                    )
                 ) else (
                     set /a idx4+=1
                     set "col4[!idx4!]=!entry!"
+                    set "col4_block[!idx4!]=!block!"
                 )
             )
         )
     )
 )
 
-REM PWAD-Block verteilen
-if !tempPWAD_idx! GTR 0 (
-    set /a "half=(tempPWAD_idx + 1) / 2"
-    for /L %%i in (1,1,!tempPWAD_idx!) do (
-        if %%i LEQ !half! ( set /a idx2+=1 & set "col2[!idx2!]=!tempPWAD[%%i]!" ) else ( set /a idx3+=1 & set "col3[!idx3!]=!tempPWAD[%%i]!" )
-    )
-)
-
+REM --- 2. Maximale Zeilenanzahl sicher ermitteln ---
 set "maxIdx=25"
-for %%v in (!idx1! !idx2! !idx3! !idx4!) do if %%v GTR !maxIdx! set "maxIdx=%%v"
+if !idx1! GTR !maxIdx! set "maxIdx=!idx1!"
+if !idx2! GTR !maxIdx! set "maxIdx=!idx2!"
+if !idx3! GTR !maxIdx! set "maxIdx=!idx3!"
+if !idx4! GTR !maxIdx! set "maxIdx=!idx4!"
+
+REM --- 3. Anzeige-Schleife ---
 for /L %%i in (1,1,!maxIdx!) do (
-    set "c1=!col1[%%i]!                                          "
-    set "c2=!col2[%%i]!                                                                          "
-    set "c3=!col3[%%i]!                                                                          "
-    set "c4=!col4[%%i]!"
-    echo    %C_Green%!c1:~0,42! %C_Gray%^|%C_Green% !c2:~0,70! %C_Gray%^|%C_Green% !c3:~0,70! %C_Gray%^|%C_Green% !c4!%C_Reset%
+    set "c1=!col1[%%i]!                                           "
+    set "c2=!col2[%%i]!                                                                      "
+    set "c3=!col3[%%i]!                                                                      "
+    set "c4_raw=!col4[%%i]!"
+    set "b4=!col4_block[%%i]!"
+
+    REM Farbe für Spalte 4 bestimmen
+    set "color4=%G%"
+    if "!b4!"=="3" set "color4=%Y%"
+    if "!b4!"=="4" set "color4=%CY%"
+    if "!b4!"=="5" set "color4=%W%"
+
+    REM Anzeige-Variable für Spalte 4 vorbereiten
+    set "display4="
+    if not "!c4_raw!"=="" (
+        if "!c4_raw!"=="EMPTY" (
+            set "display4="
+        ) else (
+            set "display4=!color4!!c4_raw!%W%"
+        )
+    )
+
+    REM WICHTIG: !display4! muss in der Ausgabe stehen
+    echo    %R%!c1:~0,42! %GRA%^|%G% !c2:~0,70! %GRA%^|%G% !c3:~0,70! %GRA%^| !display4!
 )
 
 echo.
