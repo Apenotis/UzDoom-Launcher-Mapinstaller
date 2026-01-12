@@ -71,7 +71,7 @@ set "C_Reset=%ESC%[0m"
 CLS
 echo.
 echo  %C_Cyan%===========================================================================================================================================================================================================
-echo      I W A D S                                ^| P W A D S                                          ^| P W A D S                                          ^| H E R E T I C / H E X E N / W O L F
+echo      I W A D S                                 ^| P W A D S                                           ^| P W A D S                                           ^| H E R E T I C / H E X E N / W O L F
 echo  ===========================================================================================================================================================================================================%C_Reset%
 
 REM Arrays und Zähler leeren
@@ -94,7 +94,7 @@ if not exist "%CSV_FILE%" (
 
 set "block=1"
 set "pCount=0"
-set "idx1=0" & set "idx2=0" & set "idx3=0" & set "idx4=0"
+set "idx1=0" & set "idx4=0"
 
 for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
     set "line=%%M"
@@ -114,14 +114,7 @@ for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
                     set "col1[!idx1!]=!entry!"
                 ) else if !block! EQU 2 (
                     set /a pCount+=1
-                    set /a "mod=!pCount! %% 2"
-                    if !mod! EQU 1 (
-                        set /a idx2+=1
-                        set "col2[!idx2!]=!entry!"
-                    ) else (
-                        set /a idx3+=1
-                        set "col3[!idx3!]=!entry!"
-                    )
+                    set "tempPWAD[!pCount!]=!entry!"
                 ) else (
                     set /a idx4+=1
                     set "col4[!idx4!]=!entry!"
@@ -132,6 +125,20 @@ for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
     )
 )
 
+if !pCount! GTR 0 (
+    set /a "half=(pCount + 1) / 2"
+    for /L %%i in (1,1,!half!) do (
+        set "col2[%%i]=!tempPWAD[%%i]!"
+
+        set /a "rIdx=%%i + half"
+        if !rIdx! LEQ !pCount! (
+            for %%v in (!rIdx!) do set "col3[%%i]=!tempPWAD[%%v]!"
+        )
+    )
+    set "idx2=!half!"
+    set "idx3=!half!"
+)
+
 set "maxIdx=25"
 if !idx1! GTR !maxIdx! set "maxIdx=!idx1!"
 if !idx2! GTR !maxIdx! set "maxIdx=!idx2!"
@@ -139,9 +146,9 @@ if !idx3! GTR !maxIdx! set "maxIdx=!idx3!"
 if !idx4! GTR !maxIdx! set "maxIdx=!idx4!"
 
 for /L %%i in (1,1,!maxIdx!) do (
-    set "c1=!col1[%%i]!                                           "
-    set "c2=!col2[%%i]!                                                                      "
-    set "c3=!col3[%%i]!                                                                      "
+    set "c1=!col1[%%i]!                                          "
+    set "c2=!col2[%%i]!                                                    "
+    set "c3=!col3[%%i]!                                                    "
     set "c4_raw=!col4[%%i]!"
     set "b4=!col4_block[%%i]!"
 
@@ -167,7 +174,7 @@ echo  %C_Cyan%==================================================================
 echo    %C_Yellow%[0] Beenden    [R] Reset/Neu laden%C_Reset%
 echo.
 set "M="
-set /p "M=%C_Yellow%   Gib die ID ein: %C_Reset%"
+set /p "M=%C_Yellow%    Gib die ID ein: %C_Reset%"
 
 if "%M%"=="" goto map_selection
 if /i "%M%"=="0" exit
@@ -195,23 +202,26 @@ for /f "tokens=1,2,* delims=," %%x in ("!mapData!") do (
 
 set "core=!core: =!"
 set "displayCore=!core!"
+
+set "subFolder=doom"
+if /i "!core!"=="heretic.wad" set "subFolder=heretic"
+if /i "!core!"=="hexen.wad"   set "subFolder=hexen"
+
 if /i "!core!"=="doom.wad"    set "displayCore=Doom I"
 if /i "!core!"=="doom2.wad"   set "displayCore=Doom II"
 if /i "!core!"=="heretic.wad" set "displayCore=Heretic"
 if /i "!core!"=="hexen.wad"   set "displayCore=Hexen"
 
-set "fileParams=" & set "extraParams=" & set "modFlag=0" & set "nextIsValue=0"
-set "fileParams="
-set "extraParams="
-set "modFlag=0"
-set "autoMod="
-set "nextIsValue=0"
+set "fileParams=" & set "extraParams=" & set "modFlag=0" & set "nextIsValue=0" & set "autoMod="
 
 for %%p in (!remaining!) do (
     set "item=%%~p"
     set "firstChar=!item:~0,1!"
     
-    if "!nextIsValue!"=="1" (
+    if "!nextIsConfig!"=="1" (
+        set "extraParams=!extraParams! "%~dp0!item!""
+        set "nextIsConfig=0"
+    ) else if "!nextIsValue!"=="1" (
         set "extraParams=!extraParams! !item!"
         set "nextIsValue=0"
     ) else if "!item!"=="1" (
@@ -219,38 +229,45 @@ for %%p in (!remaining!) do (
     ) else if "!item!"=="0" (
         set "modFlag=0"
     ) else if "!firstChar!"=="-" (
-        set "extraParams=!extraParams! !item!"
-        if /i "!item!"=="-warp" set "nextIsValue=1"
-        if /i "!item!"=="-skill" set "nextIsValue=1"
+        if /i "!item!"=="-config" (
+            set "extraParams=!extraParams! -config"
+            set "nextIsConfig=1"
+        ) else (
+            set "extraParams=!extraParams! !item!"
+            if /i "!item!"=="-warp" set "nextIsValue=1"
+            if /i "!item!"=="-skill" set "nextIsValue=1"
+        )
     ) else if "!firstChar!"=="+" (
         set "extraParams=!extraParams! !item!"
     ) else (
-        REM Prüfen, ob es eine Mod im /mods/ Ordner ist
-        if exist "mods\!item!\" (
-            set "autoMod=!item!"
-        ) else (
-            REM PWAD/IWAD Pfad-Check
-        set "tPath="
-        
-        REM 1. Erst im IWAD-Ordner suchen (für offizielle Addons wie hexdd.wad)
-        if exist "%IWAD_DIR%\!item!" (
-            set "tPath=%IWAD_DIR%\!item!"
-        ) else (
-            REM 2. Wenn dort nicht, dann im PWAD-Ordner suchen
-            if exist "%PWAD_DIR%\!item!" (
-                set "tPath=%PWAD_DIR%\!item!"
-            )
+        set "targetPath="
+        if exist "%PWAD_DIR%\!item!" (
+            set "targetPath=%PWAD_DIR%\!item!"
+        ) else if exist "%IWAD_DIR%\!item!" (
+            set "targetPath=%IWAD_DIR%\!item!"
+        ) else if exist "%PWAD_DIR%\!item!.wad" (
+            set "targetPath=%PWAD_DIR%\!item!.wad"
         )
         
-        if defined tPath (
-            if exist "!tPath!\" (
-                REM Falls es ein Unterordner ist
-                for %%f in ("!tPath!\*.wad" "!tPath!\*.pk3" "!tPath!\*.deh") do (
+        if defined targetPath (
+            if exist "!targetPath!\" (
+                for %%f in ("!targetPath!\*.wad" "!targetPath!\*.pk3" "!targetPath!\*.pk7" "!targetPath!\*.zip" "!targetPath!\*.deh" "!targetPath!\*.bex" "!targetPath!\*.hhe" "!targetPath!\*.res" "!targetPath!\*.def" "!targetPath!\*.acs") do (
                     set "fileParams=!fileParams! -file "%%~f""
                 )
             ) else (
-                REM Einzelne Datei (auch aus dem IWAD-Ordner) als -file laden
-                set "fileParams=!fileParams! -file "!tPath!""
+                set "fileParams=!fileParams! -file "!targetPath!""
+            )
+        ) else (
+            set "isSystem=0"
+            if /i "!item!"=="doom" set "isSystem=1"
+            if /i "!item!"=="heretic" set "isSystem=1"
+            if /i "!item!"=="hexen" set "isSystem=1"
+            
+            if "!isSystem!"=="0" ( 
+                if exist "mods\!subFolder!\!item!\" (
+                    set "autoMod=!subFolder!\!item!"
+                ) else if exist "mods\!item!\" (
+                    set "autoMod=!item!"
                 )
             )
         )
@@ -278,59 +295,39 @@ if "%USE_MODS%"=="0" (
 
 :mod_menu
 CLS
-powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=100;$B.height=20;$W.buffersize=$B;$W.windowsize=@{width=100;height=20}}" 2>nul
+powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=100;$B.height=25;$W.buffersize=$B;$W.windowsize=@{width=100;height=25}}" 2>nul
 set "indent=          "
 set "line=--------------------------------------------------------------------------------"
 set "modCount=0"
 
-for /d %%D in (mods\*) do (
-    set "folder=%%~nxD"
-    set "skip=0"
-    set "isSpecial=0"
-    
-    echo !folder! | findstr /i "hexen" >nul
-    if !errorlevel! EQU 0 (
-        set "isSpecial=1"
-        if /i not "!core!"=="hexen.wad" set "skip=1"
-    )
-    
-    echo !folder! | findstr /i "heretic" >nul
-    if !errorlevel! EQU 0 (
-        set "isSpecial=1"
-        if /i not "!core!"=="heretic.wad" set "skip=1"
-    )
+set "subFolder=doom"
+if /i "!core!"=="heretic.wad" set "subFolder=heretic"
+if /i "!core!"=="hexen.wad"   set "subFolder=hexen"
 
-    echo !folder! | findstr /i "wolfenstein" >nul
-    if !errorlevel! EQU 0 (
-        set "skip=1"
-    )
-
-    if /i "!core!"=="hexen.wad" if "!isSpecial!"=="0" set "skip=1"
-    if /i "!core!"=="heretic.wad" if "!isSpecial!"=="0" set "skip=1"
-    
-    if "!skip!"=="0" (
+if exist "mods\!subFolder!\" (
+    for /d %%D in ("mods\!subFolder!\*") do (
+        set "folder=%%~nxD"
         set /a modCount+=1
-        set "modFolder[!modCount!]=!folder!"
+        set "modFolder[!modCount!]=!subFolder!\!folder!"
         set "modTitle[!modCount!]=!folder!"
     )
 )
 
 CLS
-powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=100;$B.height=20;$W.buffersize=$B;$W.windowsize=@{width=100;height=20}}" 2>nul
 echo.
-echo %indent%%CY%DYNAMISCHE MOD-AUSWAHL%W%
+echo %indent%%CY%MOD-AUSWAHL: %G%!subFolder!%W%
 echo %indent%%line%
 echo %indent%  SPIEL : %G%%displayCore%%W%
 echo %indent%  KARTE : %G%%mapname%%W%
 echo %indent%%line%
 echo.
-
 if %modCount% EQU 0 (
-    echo %indent%  %Y%Keine passenden Mods gefunden.%W%
-) else (
-    for /L %%i in (1,1,%modCount%) do echo %indent%   %CY%%%i.%W% !modTitle[%%i]!
+    echo %indent%  %Y%Keine Mods in "mods\!subFolder!\" gefunden.%W%
+    timeout /t 2 >nul
+    goto summary_section
 )
 
+for /L %%i in (1,1,%modCount%) do echo %indent%   %CY%%%i.%W% !modTitle[%%i]!
 echo.
 echo %indent%   %CY%0.%W% Keine Mod (Vanilla)
 echo %indent%%line%
@@ -340,10 +337,12 @@ set /P "modChoice=%indent%  %Y%DEINE WAHL: %W%"
 if "%modChoice%"=="0" (set "modName=Vanilla" & set "modParam=" & goto summary_section)
 if "%modChoice%"=="" (set "modName=Vanilla" & set "modParam=" & goto summary_section)
 
-set "selectedFolder=!modFolder[%modChoice%]!"
-set "modName=!selectedFolder!"
+set "selectedPath=!modFolder[%modChoice%]!"
+set "modName=!modTitle[%modChoice%]!"
 set "modParam="
-for %%F in ("mods\!selectedFolder!\*.pk3" "mods\!selectedFolder!\*.wad" "mods\!selectedFolder!\*.zip") do set "modParam=!modParam! -file "%%F""
+for %%F in ("mods\!selectedPath!\*.pk3" "mods\!selectedPath!\*.wad" "mods\!selectedPath!\*.zip") do (
+    set "modParam=!modParam! -file "%%F""
+)
 
 :summary_section
 set "indent=          "
@@ -359,7 +358,36 @@ echo %indent%%line%
 echo.
 echo %indent%%Y%Spiel wird geladen...%W%
 
-start "" "%UZ%" +logfile "logfile.txt" -iwad "%IWAD_DIR%\%core%" !fileParams! !modParam! !extraParams!
+
+
+REM --- DEBUGGER START ---
+rem CLS
+rem echo %Y%================================================================================%W%
+rem echo %G%                  D E B U G G E R   /   L A D E - K O N T R O L L E%W%
+rem echo %Y%================================================================================%W%
+rem echo.
+rem echo  %CY%IWAD / CORE:%W%      %IWAD_DIR%\%core%
+rem echo  %CY%KARTEN-PFAD:%W%      !targetPath!
+rem echo.
+rem echo  %CY%GELADENE DATEIEN (-file):%W%
+rem if "!fileParams!"=="" (echo     keine) else (echo   !fileParams!)
+rem echo.
+rem echo  %CY%MOD-PARAMETER:%W%
+rem if "!modParam!"=="" (echo     keine) else (echo   !modParam!)
+rem echo.
+rem echo  %CY%ZUSATZ-PARAMETER (-config / -warp / etc):%W%
+rem if "!extraParams!"=="" (echo     keine) else (echo   !extraParams!)
+rem echo.
+rem echo %Y%--------------------------------------------------------------------------------%W%
+rem echo %R%   PRÜFEN:%W% Steht oben hinter "-config" der richtige Pfad zur .cfg?
+rem echo %Y%--------------------------------------------------------------------------------%W%
+rem echo.
+rem pause
+REM --- DEBUGGER ENDE ---
+
+
+
+start "" "%UZ%" +logfile "logfile.txt" -iwad "%IWAD_DIR%\%core%" !extraParams! !fileParams! !modParam!
 
 echo %indent%%G%Spiel gestartet!%W%
 echo.
@@ -368,5 +396,4 @@ echo %indent%%Y%Drücke eine Taste für das Hauptmenü...%W%
 pause >nul
 
 for %%v in (mapname core displayCore modName modParam fileParams extraParams mapData remaining found modChoice targetPath item firstChar block line M folder skip isSpecial) do set "%%v="
-for /L %%i in (1,1,300) do ( set "col1[%%i]=" & set "col2[%%i]=" & set "col3[%%i]=" & set "col4[%%i]=" & set "tempPWAD[%%i]=" )
 goto map_selection
