@@ -2,7 +2,6 @@
 setlocal enabledelayedexpansion
 chcp 65001 >nul
 
-REM --- Farben definieren ---
 set "ESC= "
 for /f %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
 set "G=%ESC%[92m" & set "Y=%ESC%[93m" & set "B=%ESC%[94m" & set "R=%ESC%[91m" & set "W=%ESC%[0m"
@@ -99,7 +98,7 @@ for /d %%D in ("%INSTALL_DIR%\*") do (
     rd /s /q "!currentFullDir!" 2>nul
 )
 
-REM --- Einzeldateien (.wad/.pk3) verarbeiten ---
+REM --- Einzeldateien verarbeiten ---
 for %%W in ("%INSTALL_DIR%\*.wad" "%INSTALL_DIR%\*.pk3") do (
     set "m_name=%%~nW"
     set "m_fold=%%~nW"
@@ -150,42 +149,53 @@ set "prefix="
 if /i "%~2"=="heretic.wad" (set "blockTarget=3" & set "prefix=h")
 if /i "%~2"=="hexen.wad"   (set "blockTarget=4" & set "prefix=hx")
 
-set "newNum=0"
+set "newNum=10"
+if /i "%prefix%"=="h" (set "newNum=100")
+if /i "%prefix%"=="hx" (set "newNum=200")
+
 set "currentB=1"
 for /f "usebackq tokens=1* delims=:" %%A in (`findstr /n "^" "%CSV_FILE%"`) do (
     set "ln=%%B"
     if "!ln!"=="" (
         set /a currentB+=1
     ) else (
-        if !currentB! EQU !blockTarget! (
-            for /f "tokens=1 delims=," %%I in ("!ln!") do (
-                set "idStr=%%I"
-                if defined prefix (
-                    set "numOnly=!idStr:%prefix%=!"
-                    set /a "numOnly=!numOnly!" 2>nul
-                    if !numOnly! GTR !newNum! set "newNum=!numOnly!"
-                ) else (
-                    set /a "numOnly=!idStr!" 2>nul
-                    if !numOnly! GTR !newNum! set "newNum=!numOnly!"
-                )
+        REM Wir prüfen den Block und extrahieren die ID
+        for /f "tokens=1 delims=," %%I in ("!ln!") do (
+            set "idStr=%%I"
+            set "numOnly=!idStr!"
+            if defined prefix (
+                set "numOnly=!idStr:%prefix%=!"
+            )
+            
+            REM Nur verarbeiten, wenn es eine Zahl ist
+            set /a "checkNum=!numOnly!" 2>nul
+            if !errorlevel! EQU 0 (
+                if !checkNum! GTR !newNum! set "newNum=!checkNum!"
             )
         )
     )
 )
+
 set /a newNum+=1
 set "id=!prefix!!newNum!"
 
+set "foundBlock=0"
 set "tmpCSV=%CSV_FILE%.tmp"
 set "currentB=1"
+
 (
     for /f "usebackq tokens=1* delims=:" %%A in (`findstr /n "^" "%CSV_FILE%"`) do (
         set "ln=%%B"
         if "!ln!"=="" (
-            if !currentB! EQU !blockTarget! echo !id!,%~2,%~1,0,%~3\
+            if !currentB! EQU !blockTarget! (
+                echo !id!,%~2,%~1,0,%~3\
+                set "foundBlock=1"
+            )
             set /a currentB+=1
         )
         echo(!ln!
     )
+    if "!foundBlock!"=="0" if !currentB! LSS !blockTarget! echo !id!,%~2,%~1,0,%~3\
 ) > "%tmpCSV%"
 move /y "%tmpCSV%" "%CSV_FILE%" >nul
 exit /b

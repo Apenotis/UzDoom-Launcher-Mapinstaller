@@ -16,9 +16,6 @@ set "CY=%ESC%[96m"
 set "W=%ESC%[0m"
 set "GRA=%ESC%[90m"
 
-REM CMD festlegen
-echo %ESC%[8;60;
-
 REM --- Modabfrage an/aus 0/1 ---
 set "USE_MODS=1"
 
@@ -28,7 +25,42 @@ set "IWAD_DIR=%~dp0iwad"
 set "PWAD_DIR=%~dp0pwad"
 set "UZ=UzDoom\uzdoom.exe"
 
-:map_selection 
+set "lastCheckFile=last_update.txt"
+set "doCheck=0"
+
+for /f "tokens=1-3 delims=. " %%a in ('echo %DATE%') do set "today=%%c%%b%%a"
+
+if not exist "%lastCheckFile%" (
+    set "doCheck=1"
+) else (
+    set /p lastDate=<"%lastCheckFile%"
+
+    for /f %%d in ('powershell -command "((Get-Date) - (Get-Date -Date ([datetime]::ParseExact('!lastDate!', 'yyyyMMdd', $null)))).Days"') do set "daysPassed=%%d"
+    
+    if !daysPassed! GEQ 7 set "doCheck=1"
+)
+
+if "!doCheck!"=="1" (
+    echo %Y%   Prüfe auf UZDoom Updates Wöchentlicher Check...%W%
+    for /f "delims=" %%v in ('powershell -command "$v = (Invoke-RestMethod -Uri 'https://api.github.com/repos/UZDoom/UZDoom/releases/latest').tag_name; echo $v" 2^>nul') do set "latest_version=%%v"
+    
+    if defined latest_version (
+        echo !today!>"%lastCheckFile%"
+        
+        set "current_version=4.14.3"
+        if not "!latest_version!"=="!current_version!" (
+            echo.
+            echo %R%   UPDATE VERFÜGBAR: %G%!latest_version!%W%
+            echo    Download: https://github.com/UZDoom/UZDoom/releases/latest
+            echo.
+            pause
+        )
+    )
+)
+
+:map_selection
+powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=205;$B.height=100;$W.buffersize=$B;$W.windowsize=@{width=205;height=66}}" 2>nul
+cls
 set "C_Cyan=%ESC%[36m"
 set "C_Green=%ESC%[32m"
 set "C_Yellow=%ESC%[33m"
@@ -38,9 +70,9 @@ set "C_Reset=%ESC%[0m"
 
 CLS
 echo.
-echo  %C_Cyan%=======================================================================================================================================================================================================================================
-echo      I W A D S                                ^| P W A D S (Spalte 1)                                                   ^| P W A D S (Spalte 2)                                                   ^| H E R E T I C / H E X E N / W O L F
-echo  =======================================================================================================================================================================================================================================%C_Reset%
+echo  %C_Cyan%===========================================================================================================================================================================================================
+echo      I W A D S                                ^| P W A D S                                          ^| P W A D S                                          ^| H E R E T I C / H E X E N / W O L F
+echo  ===========================================================================================================================================================================================================%C_Reset%
 
 REM Arrays und Zähler leeren
 for /L %%i in (1,1,300) do (
@@ -68,9 +100,11 @@ for /f "usebackq tokens=1* delims=:" %%L in (`findstr /n "^" "%CSV_FILE%"`) do (
     set "line=%%M"
     if "!line!"=="" (
         set /a block+=1
-        set /a idx4+=1
-        set "col4[!idx4!]=EMPTY"
-        set "col4_block[!idx4!]=!block!"
+        if !block! GTR 3 (
+            set /a idx4+=1
+            set "col4[!idx4!]=EMPTY"
+            set "col4_block[!idx4!]=!block!"
+        )
     ) else (
         if /i not "!line:~0,2!"=="ID" (
             for /f "tokens=1,2,3 delims=," %%a in ("!line!") do (
@@ -125,11 +159,11 @@ for /L %%i in (1,1,!maxIdx!) do (
         )
     )
 
-    echo    %R%!c1:~0,42! %GRA%^|%G% !c2:~0,70! %GRA%^|%G% !c3:~0,70! %GRA%^| !display4!
+    echo    %R%!c1:~0,42! %GRA%^|%G% !c2:~0,50! %GRA%^|%G% !c3:~0,50! %GRA%^| !display4!
 )
 
 echo.
-echo  %C_Cyan%=======================================================================================================================================================================================================================================%C_Reset%
+echo  %C_Cyan%===========================================================================================================================================================================================================%C_Reset%
 echo    %C_Yellow%[0] Beenden    [R] Reset/Neu laden%C_Reset%
 echo.
 set "M="
@@ -196,13 +230,27 @@ for %%p in (!remaining!) do (
             set "autoMod=!item!"
         ) else (
             REM PWAD/IWAD Pfad-Check
-            set "tPath="
-            if exist "%PWAD_DIR%\!item!" (set "tPath=%PWAD_DIR%\!item!") else (if exist "%IWAD_DIR%\!item!" (set "tPath=%IWAD_DIR%\!item!"))
-            if defined tPath (
-                if exist "!tPath!\" (
-                    for %%f in ("!tPath!\*.wad" "!tPath!\*.pk3" "!tPath!\*.deh") do set "fileParams=!fileParams! -file "%%~f""
-                ) else (
-                    set "fileParams=!fileParams! -file "!tPath!""
+        set "tPath="
+        
+        REM 1. Erst im IWAD-Ordner suchen (für offizielle Addons wie hexdd.wad)
+        if exist "%IWAD_DIR%\!item!" (
+            set "tPath=%IWAD_DIR%\!item!"
+        ) else (
+            REM 2. Wenn dort nicht, dann im PWAD-Ordner suchen
+            if exist "%PWAD_DIR%\!item!" (
+                set "tPath=%PWAD_DIR%\!item!"
+            )
+        )
+        
+        if defined tPath (
+            if exist "!tPath!\" (
+                REM Falls es ein Unterordner ist
+                for %%f in ("!tPath!\*.wad" "!tPath!\*.pk3" "!tPath!\*.deh") do (
+                    set "fileParams=!fileParams! -file "%%~f""
+                )
+            ) else (
+                REM Einzelne Datei (auch aus dem IWAD-Ordner) als -file laden
+                set "fileParams=!fileParams! -file "!tPath!""
                 )
             )
         )
@@ -229,6 +277,8 @@ if "%USE_MODS%"=="0" (
 )
 
 :mod_menu
+CLS
+powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=100;$B.height=20;$W.buffersize=$B;$W.windowsize=@{width=100;height=20}}" 2>nul
 set "indent=          "
 set "line=--------------------------------------------------------------------------------"
 set "modCount=0"
@@ -266,6 +316,7 @@ for /d %%D in (mods\*) do (
 )
 
 CLS
+powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=100;$B.height=20;$W.buffersize=$B;$W.windowsize=@{width=100;height=20}}" 2>nul
 echo.
 echo %indent%%CY%DYNAMISCHE MOD-AUSWAHL%W%
 echo %indent%%line%
