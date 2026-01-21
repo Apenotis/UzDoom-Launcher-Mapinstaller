@@ -18,7 +18,9 @@ set "W=%ESC%[0m"
 set "GRA=%ESC%[90m"
 
 REM --- EINSTELLUNGEN ---
+set "show_stats=1"
 set "USE_MODS=1"
+
 set "CSV_FILE=maps.csv"
 set "IWAD_DIR=%~dp0iwad"
 set "PWAD_DIR=%~dp0pwad"
@@ -26,8 +28,9 @@ set "UZ=%~dp0UzDoom\uzdoom.exe"
 set "CUR_VERSION=4.14.3"
 set "TIME_FILE=total_time.txt"
 
-if not exist "%TIME_FILE%" echo 0 > "%TIME_FILE%"
+if not exist "%TIME_FILE%" (echo 0> "%TIME_FILE%")
 set /p totalMinutes=<"%TIME_FILE%"
+if "!totalMinutes!"=="" set "totalMinutes=0"
 
 REM --- UPDATE CHECK (JEDER START) ---
 set "updateAvailable=0"
@@ -38,13 +41,13 @@ if defined latest_version (
 
 :map_selection
 title UZDoom Launcher
-powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=205;$B.height=100;$W.buffersize=$B;$W.windowsize=@{width=205;height=66}}" 2>nul
 cls
 
 set "currentError=!lastWrongID!"
 set "lastWrongID="
 
-for /f "tokens=1,2" %%a in ('powershell -command "$h=[math]::Floor(!totalMinutes! / 60); $m=!totalMinutes! %% 60; '{0:D2}:{1:D2}' -f [int]$h, [int]$m"') do set "displayTime=%%a"
+REM Nur Formatierung, keine Berechnung hier!
+for /f "tokens=1" %%a in ('powershell -command "$t=[int]!totalMinutes!; $h=[math]::Floor($t/3600); $m=[math]::Floor(($t%%3600)/60); $s=$t%%60; '{0:D2}:{1:D2}:{2:D2}' -f [int]$h,[int]$m,[int]$s"') do set "displayTime=%%a"
 
 set "C_Cyan=%ESC%[36m"
 set "C_Green=%ESC%[32m"
@@ -61,9 +64,9 @@ if exist "last_played.txt" (
 )
 
 echo.
-echo  %C_Cyan%===========================================================================================================================================================================================================
-echo      I W A D S                                 ^| P W A D S                                          ^| P W A D S                                          ^| H E R E T I C / H E X E N / W O L F
-echo  ===========================================================================================================================================================================================================%C_Reset%
+echo  %C_Cyan%============================================================================================================================================================================================================
+echo      I W A D S                                   ^| P W A D S                                     ^| P W A D S                                     ^| H E R E T I C / H E X E N / W O L F
+echo  ============================================================================================================================================================================================================%C_Reset%
 
 for /L %%i in (1,1,400) do (
     set "col1[%%i]=" & set "col2[%%i]=" & set "col3[%%i]=" & set "col4[%%i]=" & set "tempPWAD[%%i]="
@@ -142,53 +145,55 @@ for /L %%i in (1,1,!maxIdx!) do (
     
     set "id_color1=%R%" & set "id_color2=%G%" & set "id_color3=%G%" & set "id_color4=!color4!"
 
-    set "spaces1=                                           "
+    set "spaces1=                                                  "
     set "c1_final=!c1_raw!!spaces1!"
-    set "c1_final=!c1_final:~0,43!"
+    set "c1_final=!c1_final:~0,45!"
     if not "!c1_raw!"=="" for /f "tokens=1 delims= " %%A in ("!c1_raw!") do (
         if /i "%%A"=="!lastID!" (
             set "nameWithMarker=!c1_raw! [L]"
             set "c1_pad=!nameWithMarker!!spaces1!"
-            set "temp=!c1_pad:~0,43!"
+            set "temp=!c1_pad:~0,45!"
             set "c1_final=!temp:[L]=%ESC%[1;95m[L]%W%!"
         )
     )
     
-    set "spaces2=                                                    "
+    REM --- Spalte 2 & 3 (PWADS) ---
+    set "spaces2=                                                  "
     set "c2_final=!c2_raw!!spaces2!"
-    set "c2_final=!c2_final:~0,50!"
+    set "c2_final=!c2_final:~0,45!"
     if not "!c2_raw!"=="" for /f "tokens=1 delims= " %%A in ("!c2_raw!") do (
         if /i "%%A"=="!lastID!" (
             set "nameWithMarker=!c2_raw! [L]"
             set "c2_pad=!nameWithMarker!!spaces2!"
-            set "temp=!c2_pad:~0,50!"
+            set "temp=!c2_pad:~0,45!"
             set "c2_final=!temp:[L]=%MAG%[L]%W%!"
         )
     )
 
     set "c3_final=!c3_raw!!spaces2!"
-    set "c3_final=!c3_final:~0,50!"
+    set "c3_final=!c3_final:~0,45!"
     if not "!c3_raw!"=="" for /f "tokens=1 delims= " %%A in ("!c3_raw!") do (
         if /i "%%A"=="!lastID!" (
             set "nameWithMarker=!c3_raw! [L]"
             set "c3_pad=!nameWithMarker!!spaces2!"
-            set "temp=!c3_pad:~0,50!"
+            set "temp=!c3_pad:~0,45!"
             set "c3_final=!temp:[L]=%MAG%[L]%W%!"
         )
     )
     
+    REM --- Spalte 4 (EXTRA) ---
     set "display4="
     if not "!c4_raw!"=="" (
         if "!c4_raw!"=="EMPTY" (
             set "display4="
         ) else (
             set "c4_final=!c4_raw!!spaces2!"
-            set "c4_final=!c4_final:~0,50!"
+            set "c4_final=!c4_final:~0,45!"
             for /f "tokens=1 delims= " %%A in ("!c4_raw!") do (
                 if /i "%%A"=="!lastID!" (
                     set "nameWithMarker=!c4_raw! [L]"
                     set "c4_pad=!nameWithMarker!!spaces2!"
-                    set "temp=!c4_pad:~0,50!"
+                    set "temp=!c4_pad:~0,45!"
                     set "c4_final=!temp:[L]=%MAG%[L]%W%!"
                 )
             )
@@ -203,9 +208,9 @@ set "updMarker="
 if "!updateAvailable!"=="1" set "updMarker= %R%[U] Update verfügbar%W%"
 
 echo.
-echo  %C_Cyan%===========================================================================================================================================================================================================%C_Reset%
-echo    %W%KARTEN: %G%Gesamt: !totalMaps!%W% ^| %R%Doom 1: !countD1!%W% ^| %G%Doom 2: !countD2!%W% ^| %CY%Extra: !countExtra!%W%  %GRA%│%W%  %Y%SPIELZEIT: !displayTime!%W%  %GRA%│%W%  MODS: %Y%!modTotalCount!%W%  %GRA%│%W%  %B%UZDoom !CUR_VERSION!!updMarker!%W%
-echo  %C_Cyan%===========================================================================================================================================================================================================%C_Reset%
+echo  %C_Cyan%============================================================================================================================================================================================================%C_Reset%
+echo    KARTEN: %G%Gesamt: !totalMaps!%W% ^| %R%IWAD: !countD1!%W% ^| %G%PWAD: !countD2!%W% ^| %CY%Heretic / Hexen: !countExtra!%W%  %GRA%│%W%  %Y%SPIELZEIT: !displayTime!%W%  %GRA%│%W%  MODS: %Y%!modTotalCount!%W%  %GRA%│%W%  %B%UZDoom !CUR_VERSION!!updMarker!%W%
+echo  %C_Cyan%============================================================================================================================================================================================================%C_Reset%
 
 set "lineText=   %C_Yellow%[0] Beenden    [R] Reset/Neu laden%C_Reset%"
 if not "!lastID!"=="" set "lineText=!lineText!    %Y%Zuletzt gespielt: %CY%!lastID! - !lastName! %Y%[L]%C_Reset%"
@@ -214,7 +219,7 @@ echo.
 if defined currentError (echo    %R%Fehler: ID '%Y%!currentError!%R%' ist ungültig.%C_Reset%) else (echo.)
 
 set "M="
-set /p "M=%C_Yellow%    Gib die ID ein (ENTER für letzte Karte - %MAG%!lastID!%C_Yellow%): %C_Reset%"
+set /p "M=%C_Yellow%    Gib die ID ein ODER ENTER für letzte Karte - %MAG%!lastID!%C_Yellow%): %C_Reset%"
 
 if "!M!"=="" (
     if not "!lastID!"=="" (
@@ -224,7 +229,7 @@ if "!M!"=="" (
     ) else (
         echo %R%    Keine letzte ID gespeichert!%C_Reset%
         pause
-        goto :dein_menue_label
+        goto :map_selection
     )
 )
 
@@ -310,7 +315,6 @@ if %modCount% EQU 0 goto summary_section
 
 :mod_display
 CLS
-powershell -command "&{$W=(get-host).ui.rawui;$B=$W.buffersize;$B.width=100;$B.height=25;$W.buffersize=$B;$W.windowsize=@{width=100;height=25}}" 2>nul
 set "indent=          " & set "line=--------------------------------------------------------------------------------"
 echo.
 echo %indent%%CY%MOD-AUSWAHL: %G%!subFolder!%W%
@@ -323,7 +327,7 @@ for /L %%i in (1,1,%modCount%) do echo %indent%   %CY%%%i.%W% !modTitle[%%i]!
 echo.
 echo %indent%   %CY%0.%W% Keine Mod (Vanilla)
 echo %indent%%line%
-if defined modError (echo. & echo %indent%   %R%Fehler: ID '%Y%!modError!%R%' ungueltig.%C_Reset% & set "modError=")
+if defined modError (echo. & echo %indent%   %R%Fehler: ID '%Y%!modError!%R%' ungültig.%C_Reset% & set "modError=")
 echo.
 set "modChoice="
 set /P "modChoice=%indent%  %Y%DEINE WAHL: %W%"
@@ -353,18 +357,102 @@ echo.
 echo %indent%%Y%Spiel läuft... Bitte warten.%W%
 
 echo !M!>"last_played.txt"
-for /f %%t in ('powershell -command "[int][double]::Parse((Get-Date -UFormat %%s))"') do set "startTime=%%t"
 
-start /wait "" "%UZ%" +logfile "logfile.txt" -iwad "%IWAD_DIR%\!core!" !extraParams! !fileParams! !modParam!
+REM --- Zeitstempel beim Start ---
+set "startTime=%time: =0%"
+set "startTime=!startTime:,=.!"
 
-for /f %%t in ('powershell -command "$end=[int][double]::Parse((Get-Date -UFormat %%s)); $diff=[math]::Round(($end - %startTime%) / 60); echo $diff"') do set "sessionMinutes=%%t"
-set /a totalMinutes+=sessionMinutes
-echo !totalMinutes! > "%TIME_FILE%"
+set "lastLine=0"
+if exist "logfile.txt" for /f %%A in ('find /c /v "" ^< "logfile.txt"') do set "lastLine=%%A"
 
-echo.
-echo %indent%%G%Spiel beendet! (Sitzung: !sessionMinutes! Min.)%W%
-echo %indent%--------------------------------------------------------------------------------
-echo %indent%%Y%Drücke eine Taste...%W%
-pause >nul
-for %%v in (mapname core displayCore modName modParam fileParams extraParams mapData remaining found modChoice targetPath item firstChar block line folder nextIsValue autoMod isSystem sessionMinutes startTime end diff displayTime) do set "%%v="
+REM --- Spielstart ---
+start /wait "" "%UZ%" +logfile "logfile.txt" -iwad "%IWAD_DIR%\!core!" !fileParams! !modParam! !extraParams!
+
+REM --- Zeitstempel beim Ende ---
+set "endTime=%time: =0%"
+set "endTime=!endTime:,=.!"
+for /f %%t in ('powershell -command "$s=[datetime]::Parse('!startTime!'); $e=[datetime]::Parse('!endTime!'); if($e -lt $s){$e=$e.AddDays(1)}; [int][math]::Floor(($e-$s).TotalSeconds)"') do set "sessionSeconds=%%t"
+
+if not defined sessionSeconds set "sessionSeconds=0"
+set /a totalMinutes=!totalMinutes! + !sessionSeconds!
+echo !totalMinutes!>"%TIME_FILE%"
+
+cls
+
+REM --- SESSION STATISTIK ---
+if "!show_stats!"=="1" (
+    echo %G%    Spiel beendet. Analysiere Sitzung... %W%
+    set /a health_count=0, armor_count=0, ammo_count=0, key_count=0, powerup_count=0
+    set "weapon_list= "
+
+    if exist "logfile.txt" (
+        REM Aktuelle Sitzung isolieren
+        more +!lastLine! "logfile.txt" > "session_raw.tmp"
+        
+        REM Vorfiltern auf Items/Waffen (Sichert Performance und Stabilität)
+        findstr /I "genommen erhalten picked got Slot Mega Sphäre Super charge keycard Schlüssel Karte Skull Radiation Visor Suit Shielding Invulnerability Unverwundbarkeit Invisibility Unsichtbarkeit" "session_raw.tmp" > "filtered_log.tmp"
+        
+        for /f "usebackq delims=" %%L in ("filtered_log.tmp") do (
+            set "raw_line=%%L"
+            
+            if defined raw_line (
+                REM Heilung & Rüstung
+                echo "!raw_line!" | findstr /I "Heilung Health Bonus Stimpack Medikit Mega Supercharge Berserk" >nul && set /a health_count+=1
+                echo "!raw_line!" | findstr /I "Panzer Armor Mega" >nul && set /a armor_count+=1
+                
+                REM Munition
+                echo "!raw_line!" | findstr /I "Patronen Magazin Rakete Zelle Kiste Clip Shell Rocket Cell Ammo Box Rucksack Backpack" >nul && set /a ammo_count+=1
+                
+                REM Schlüssel
+                echo "!raw_line!" | findstr /I "Schlüssel Karte Keycard Key Skull" >nul && set /a key_count+=1
+                
+                REM Power-Ups
+                echo "!raw_line!" | findstr /I "Suit Visor Shielding Invulnerability Unverwundbarkeit Invisibility Unsichtbarkeit Computer Strahlenschutz Infrarot" >nul && set /a powerup_count+=1
+
+                REM Waffen-Check
+                for %%W in (Pistole Pistol Schrotflinte Shotgun Gewehr Chaingun Maschinengewehr Kettensäge Saw Raketenwerfer Launcher Plasma BFG MG-42 Railgun) do (
+                    echo "!raw_line!" | findstr /I "%%W" >nul && (
+                        echo "!weapon_list!" | findstr /I "%%W" >nul || (
+                            if "!weapon_list!"==" " (
+                                set "weapon_list=%%W"
+                            ) else (
+                                set "weapon_list=!weapon_list!, %%W"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+    cls
+    echo %MAG%========================================================%W%
+    echo    S E S S I O N   Z U S A M M E N F A S S U N G
+    echo %MAG%========================================================%W%
+    echo.
+    echo    Projekt: !M! - %Y%!mapname!%W%
+    
+    set /a "sM=sessionSeconds / 60"
+    set /a "sS=sessionSeconds %% 60"
+    echo    Dauer:   %Y%!sM! Min. !sS! Sek.%W%
+    echo.
+    echo    Gegenstände:
+    echo    - Heilung:  %G%!health_count!%W% ^| Rüstung: %CY%!armor_count!%W%
+    echo    - Munition: %Y%!ammo_count!%W% ^| Schlüssel: %B%!key_count!%W%
+    echo    - Spezial:  %MAG%!powerup_count!%W%
+    
+    if not "!weapon_list!"==" " (
+        echo.
+        echo    Waffen:     %MAG%!weapon_list!%W%
+    )
+    echo.
+    echo %MAG%========================================================%W%
+    
+    if exist "session_raw.tmp" del "session_raw.tmp"
+    if exist "filtered_log.tmp" del "filtered_log.tmp"
+    pause
+)
+
+REM --- VARIABLEN LEEREN UND ZURÜCK ZUR AUSWAHL ---
+for %%v in (mapname core displayCore modName modParam fileParams extraParams mapData remaining found modChoice targetPath item firstChar block line folder nextIsValue autoMod isSystem sessionMinutes startTime endTime displayTime health_count armor_count ammo_count key_count powerup_count weapon_list raw_line lastLine) do set "%%v="
 goto map_selection
