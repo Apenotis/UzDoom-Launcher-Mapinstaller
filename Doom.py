@@ -1058,7 +1058,7 @@ def main():
         if choice == 'i':
             run_installer()
             continue
-        if key == 'e':
+        if choice == 'e':
             select_engine()
         if choice == 's':
             search_doomworld()
