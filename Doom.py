@@ -1,4 +1,4 @@
-import os, sys, subprocess, time, math, urllib.request, json, csv, re, random, zipfile, shutil
+import os, sys, subprocess, time, math, urllib.request, json, csv, re, random, zipfile, shutil, configparser
 from datetime import datetime
 from pathlib import Path
 
@@ -73,9 +73,8 @@ class Colors:
     WHITE = '\033[0m'
     GRAY = '\033[90m'
 
-# --- EINSTELLUNGEN ---
-SHOW_STATS = False # Auf True setzen für die Auswertung am Ende
-USE_MODS = True
+SHOW_STATS = False
+USE_MODS = False
 DEBUG_MODE = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -88,13 +87,11 @@ TIME_FILE = os.path.join(BASE_DIR, "total_time.txt")
 terminal_width = 200
 DEFAULT_ENGINE = "uzdoom"
 CURRENT_ENGINE = DEFAULT_ENGINE
-ENGINES_DIR = "engines"
+#ENGINES_DIR = "engines"
+CONFIG_FILE = "config.ini"
 
 # Liste der unterstützten Engines (Namen der EXEs ohne .exe)
 SUPPORTED_ENGINES = ["uzdoom", "gzdoom", "zandronum", "zdoom", "lzdoom"]
-
-if not os.path.exists(ENGINES_DIR):
-    os.makedirs(ENGINES_DIR)
 
 def toggle_map_clear(map_id):
     if not os.path.exists(CSV_FILE): return False
@@ -632,6 +629,7 @@ def select_engine():
         if choice == '0' or not choice: break
         if choice.isdigit() and 0 < int(choice) <= len(found):
             CURRENT_ENGINE = found[int(choice)-1]
+            save_settings()
             break
 
 def search_doomworld():
@@ -835,8 +833,45 @@ def download_idgames(file_data):
         if os.path.exists(zip_path): os.remove(zip_path)
         input("  Drücke ENTER...")
 
+SETTINGS_FILE = "settings.json"
+
+def load_settings():
+    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS
+    config = configparser.ConfigParser()
+    
+    # 1. Zuerst Defaults setzen, falls die Datei fehlt
+    # (Diese Variablen müssen oben im Skript existieren!)
+    
+    if os.path.exists(CONFIG_FILE):
+        try:
+            config.read(CONFIG_FILE)
+            if 'DEFAULT' in config:
+                # getboolean wandelt "True"/"False" Text in echtes True/False um
+                SHOW_STATS = config['DEFAULT'].getboolean('showstats', SHOW_STATS)
+                USE_MODS = config['DEFAULT'].getboolean('usemods', USE_MODS)
+                DEBUG_MODE = config['DEFAULT'].getboolean('debugmode', DEBUG_MODE)
+                CURRENT_ENGINE = config['DEFAULT'].get('currentengine', CURRENT_ENGINE)
+        except Exception as e:
+            print(f" Fehler beim Laden der config.ini: {e}")
+
+def save_settings():
+    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS
+    try:
+        config = configparser.ConfigParser()
+        config['DEFAULT'] = {
+            'showstats': str(SHOW_STATS),
+            'usemods': str(USE_MODS),
+            'debugmode': str(DEBUG_MODE),
+            'currentengine': str(CURRENT_ENGINE),
+            'terminalwidth': '200'
+        }
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as configfile:
+            config.write(configfile)
+    except Exception as e:
+        print(f" Fehler beim Speichern der config.ini: {e}")
+
 def main():
-    global SHOW_STATS, USE_MODS, DEBUG_MODE, terminal_width
+    global SHOW_STATS, USE_MODS, DEBUG_MODE, terminal_width, CURRENT_ENGINE
 
     initial_setup()
 
@@ -1011,6 +1046,7 @@ def main():
 
         if choice == 'e':
             select_engine()
+            save_settings()
             continue
         if choice == '0':
             sys.exit(0)
@@ -1027,12 +1063,15 @@ def main():
 
         if choice == '/m':
             USE_MODS = not USE_MODS
+            save_settings()
             continue
         if choice == '/s':
             SHOW_STATS = not SHOW_STATS
+            save_settings()
             continue
         if choice == '/d':
             DEBUG_MODE = not DEBUG_MODE
+            save_settings()
             continue
             
         if choice == 'r':
@@ -1321,6 +1360,7 @@ def analyze_session(log_file, map_id, mapname, session_seconds):
         input()
 
 if __name__ == "__main__":
+    load_settings()
     try:
         main()
     except Exception as e:
