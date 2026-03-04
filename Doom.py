@@ -86,6 +86,15 @@ UZ = os.path.join(BASE_DIR, "UzDoom", "uzdoom.exe")
 CUR_VERSION = "4.14.3"
 TIME_FILE = os.path.join(BASE_DIR, "total_time.txt")
 terminal_width = 200
+DEFAULT_ENGINE = "uzdoom"
+CURRENT_ENGINE = DEFAULT_ENGINE
+ENGINES_DIR = "engines"
+
+# Liste der unterstützten Engines (Namen der EXEs ohne .exe)
+SUPPORTED_ENGINES = ["uzdoom", "gzdoom", "zandronum", "zdoom", "lzdoom"]
+
+if not os.path.exists(ENGINES_DIR):
+    os.makedirs(ENGINES_DIR)
 
 def toggle_map_clear(map_id):
     if not os.path.exists(CSV_FILE): return False
@@ -582,6 +591,49 @@ def fetch_folder_files(folder_name):
     except:
         return [], []
 
+def get_engine_path():
+    """ Sucht die .exe im Engine-Ordner im Root-Verzeichnis (z.B. uzdoom/uzdoom.exe) """
+    exe_name = f"{CURRENT_ENGINE}.exe"
+    
+    # Pfad-Struktur: ./uzdoom/uzdoom.exe
+    path_in_folder = os.path.join(CURRENT_ENGINE, exe_name)
+    
+    if os.path.exists(path_in_folder):
+        return path_in_folder
+    
+    # Fallback: Falls die exe doch direkt im Root ohne Ordner liegt
+    if os.path.exists(exe_name):
+        return exe_name
+        
+    return exe_name # Fallback auf System-Umgebung
+
+def select_engine():
+    """ Menü zur Engine-Wahl """
+    global CURRENT_ENGINE
+    while True:
+        clear_screen()
+        print(f"\n  {Colors.MAGENTA}--- ENGINE-AUSWAHL ---{Colors.WHITE}")
+        print(f"  Aktuell: {Colors.CYAN}{CURRENT_ENGINE}{Colors.WHITE}\n")
+        
+        found = []
+        for i, eng in enumerate(SUPPORTED_ENGINES):
+            exe_n = f"{eng}.exe"
+            # Wir prüfen: ./name/name.exe ODER direkt im Root
+            path_check = os.path.join(eng, exe_n)
+            is_ready = os.path.exists(path_check) or os.path.exists(exe_n)
+            
+            status = f"{Colors.GREEN}[BEREIT]{Colors.WHITE}" if is_ready else f"{Colors.GRAY}[NICHT GEFUNDEN]{Colors.WHITE}"
+            print(f"  {Colors.YELLOW}[{i+1}]{Colors.WHITE} {eng:<12} {status}")
+            found.append(eng)
+
+        print(f"\n  {Colors.YELLOW}[0]{Colors.WHITE} Zurück")
+        choice = input(f"\n  Wahl: ").strip()
+        
+        if choice == '0' or not choice: break
+        if choice.isdigit() and 0 < int(choice) <= len(found):
+            CURRENT_ENGINE = found[int(choice)-1]
+            break
+
 def search_doomworld():
     print(f"\n  {Colors.MAGENTA}--- DOOMWORLD ONLINE-ARCHIV ---{Colors.WHITE}")
     print(f"  {Colors.YELLOW}[1]{Colors.WHITE} Manuelle Suche (Name/Titel)")
@@ -692,7 +744,7 @@ def search_doomworld():
             else:
                 print(f"  {Colors.RED}[!] Ungültige Nummer.{Colors.WHITE}")
                 time.sleep(1)
-        
+
 def download_idgames(file_data):
     TEMP_DIR = "install"  # Nur noch als Zwischenspeicher
     FINAL_DIR = "pwad"    # Das eigentliche Ziel für deine Mods
@@ -943,9 +995,8 @@ def main():
         print()
 
         # --- BEFEHLSZEILE (Ganz unten) ---
-        cmd_line = f"    {Colors.YELLOW}[0] Beenden    [?] Zufall    [R] Reset    [I] Installer    [S] Suche{Colors.WHITE}"
         if last_id:
-            cmd_line += f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}"
+            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Installer  [S] Suche{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}" + (f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}" if last_id else "")
         
         print(cmd_line)
         print()
@@ -958,6 +1009,9 @@ def main():
 
         choice = input(f"    {Colors.YELLOW}Gib die {Colors.YELLOW}ID{Colors.CYAN} {Colors.YELLOW}ein ODER ENTER für letzte Karte - {Colors.MAGENTA}{last_id}{Colors.YELLOW}): {Colors.WHITE}").strip().lower()
 
+        if choice == 'e':
+            select_engine()
+            continue
         if choice == '0':
             sys.exit(0)
 
@@ -1004,6 +1058,8 @@ def main():
         if choice == 'i':
             run_installer()
             continue
+        if key == 'e':
+            select_engine()
         if choice == 's':
             search_doomworld()
             continue
@@ -1166,32 +1222,36 @@ def launch_game(map_data):
     log_file = os.path.join(BASE_DIR, "logfile.txt")
     start_time = datetime.now()
     
-    cmd = [UZ, "+logfile", "logfile.txt", "-iwad", os.path.join(IWAD_DIR, core)] + file_params + mod_params + extra_params
-    
+ # --- NEU: Dynamische Engine-Wahl (Diese Zeile muss eingerückt sein!) ---
+    engine_exe = get_engine_path() 
+
+    # Befehl zusammenbauen
+    cmd = [engine_exe, "+logfile", "logfile.txt", "-iwad", os.path.join(IWAD_DIR, core)] + file_params + mod_params + extra_params
+
     # --- DEBUG SCHALTER ---
     if DEBUG_MODE:
         print(f"\n          {Colors.MAGENTA}=== DEBUG: VOLLSTÄNDIGER BEFEHL ==={Colors.WHITE}")
         debug_str = " ".join(cmd)
         print(f"          {Colors.CYAN}{debug_str}{Colors.WHITE}")
         print(f"          {Colors.MAGENTA}==================================={Colors.WHITE}\n")
-        
         debug_choice = input(f" {Colors.YELLOW}Drücke ENTER zum Starten oder tippe '0' zum Abbrechen: {Colors.WHITE}").strip()
-        
         if debug_choice == '0':
             print(f"          {Colors.RED}Start vom Benutzer abgebrochen.{Colors.WHITE}")
             time.sleep(1.5)
-            return 
+            return
 
-    # Sicherheitsprüfung: Existiert die Engine überhaupt?
-    if not os.path.exists(UZ):
-        print(f"\n {Colors.RED}Fehler: Engine nicht gefunden unter:{Colors.WHITE}")
-        print(f" {Colors.YELLOW}{UZ}{Colors.WHITE}")
-        print(f"\n {Colors.GRAY}Kehre ins Menü zurück...{Colors.WHITE}")
+    # Sicherheitsprüfung
+    if not os.path.exists(engine_exe):
+        print(f"\n {Colors.RED}Fehler: Engine '{CURRENT_ENGINE}' nicht gefunden unter:{Colors.WHITE}")
+        print(f" {Colors.YELLOW}{engine_exe}{Colors.WHITE}")
+        print(f"\n {Colors.GRAY}Stelle sicher, dass die .exe im Ordner 'engines' liegt.{Colors.WHITE}")
         time.sleep(4)
-        return
+        return 
 
+    # Das Spiel starten
     subprocess.run(cmd)
 
+    # Zeitmessung und Statistik (Muss exakt unter subprocess stehen!)
     end_time = datetime.now()
     session_seconds = int((end_time - start_time).total_seconds())
     
