@@ -5,8 +5,7 @@ from pathlib import Path
 def download_uzdoom():
     print(f"\n  {Colors.MAGENTA}>>> Lade UZDoom Engine herunter... Bitte warten. <<<{Colors.WHITE}")
     print(f"  {Colors.GRAY}(Suche automatisch nach der neuesten Version...){Colors.WHITE}")
-    
-    # 1. Neueste Version über die GitHub API abfragen
+
     api_url = "https://api.github.com/repos/UZDoom/UZDoom/releases/latest"
     download_url = ""
     
@@ -36,7 +35,6 @@ def download_uzdoom():
     zip_path = os.path.join(BASE_DIR, "uzdoom_temp.zip")
     uz_dir = os.path.join(BASE_DIR, "UzDoom")
     
-    # 3. Datei herunterladen und entpacken
     try:
         urllib.request.urlretrieve(download_url, zip_path)
         print(f"  {Colors.GREEN}[+]{Colors.WHITE} Download abgeschlossen. Entpacke Dateien...")
@@ -44,14 +42,13 @@ def download_uzdoom():
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(uz_dir)
             
-        os.remove(zip_path) # Räumt die ZIP-Datei danach auf
+        os.remove(zip_path)
         print(f"  {Colors.GREEN}[+]{Colors.WHITE} UZDoom wurde erfolgreich installiert!")
         
     except Exception as e:
         print(f"  {Colors.RED}[!] Fehler beim Herunterladen oder Entpacken: {e}{Colors.WHITE}")
 
 def real_len(text):
-    """Gibt die sichtbare Länge eines Strings ohne ANSI-Farbcodes zurück."""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return len(ansi_escape.sub('', text))
 
@@ -89,8 +86,6 @@ DEFAULT_ENGINE = "uzdoom"
 CURRENT_ENGINE = DEFAULT_ENGINE
 #ENGINES_DIR = "engines"
 CONFIG_FILE = "config.ini"
-
-# Liste der unterstützten Engines (Namen der EXEs ohne .exe)
 SUPPORTED_ENGINES = ["uzdoom", "gzdoom", "zandronum", "zdoom", "lzdoom"]
 
 def toggle_map_clear(map_id):
@@ -100,7 +95,6 @@ def toggle_map_clear(map_id):
     search_id = map_id.upper()
     
     with open(CSV_FILE, 'r', encoding='utf-8') as f:
-        # FEHLER BEHOBEN: Wir nutzen jetzt das Standard-Trennzeichen (Komma)
         reader = list(csv.reader(f))
         if not reader: return False
         
@@ -109,11 +103,8 @@ def toggle_map_clear(map_id):
         
         for row in reader[1:]:
             if not row: continue
-            
-            # Die ID (Spalte 0) auslesen und Leerzeichen entfernen
             if row[0].strip().upper() == search_id:
                 found = True
-                # Toggle: Wenn [C] da ist, entfernen. Wenn nicht, hinzufügen.
                 if " [C]" in row[2]:
                     row[2] = row[2].replace(" [C]", "")
                 else:
@@ -122,7 +113,6 @@ def toggle_map_clear(map_id):
     
     if found:
         with open(CSV_FILE, 'w', encoding='utf-8', newline='') as f:
-            # FEHLER BEHOBEN: Auch hier das Semikolon entfernt!
             writer = csv.writer(f)
             writer.writerows(rows)
     return found
@@ -166,7 +156,6 @@ def get_last_played():
     return ""
 
 def update_csv_playtime(target_id, add_minutes):
-    """Aktualisiert die Spielzeit einer bestimmten ID in der maps.csv"""
     if not os.path.exists(CSV_FILE) or add_minutes <= 0: 
         return
         
@@ -175,13 +164,13 @@ def update_csv_playtime(target_id, add_minutes):
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames
         if 'Playtime' not in fieldnames:
-            return # Sicherheitsabbruch, falls die Spalte fehlt
+            return
             
         for row in reader:
             if row.get('ID', '').strip() == target_id:
                 current_time = int(row.get('Playtime', '0'))
                 row['Playtime'] = str(current_time + add_minutes)
-                row['LastPlayed'] = datetime.now().strftime("%d.%m.%Y") # Update auch das Datum!
+                row['LastPlayed'] = datetime.now().strftime("%d.%m.%Y")
             rows.append(row)
             
     with open(CSV_FILE, 'w', encoding='utf-8', newline='') as f:
@@ -190,10 +179,6 @@ def update_csv_playtime(target_id, add_minutes):
         writer.writerows(rows)
 
 def get_next_id(game_type):
-    """
-    Findet die nächste freie ID basierend auf dem Spieltyp.
-    game_type: 'DOOM', 'HERETIC' oder 'HEXEN'
-    """
     if not os.path.exists(CSV_FILE):
         return "1" if game_type == 'DOOM' else (f"H1" if game_type == 'HERETIC' else "HX1")
     
@@ -202,26 +187,21 @@ def get_next_id(game_type):
     elif game_type == 'HEXEN': prefix = "HX"
     
     ids = []
-    # 'utf-8-sig' filtert unsichtbare Sonderzeichen am Dateianfang (BOM)
     with open(CSV_FILE, 'r', encoding='utf-8-sig') as f:
         lines = f.readlines()
         if not lines: return "1" if game_type == 'DOOM' else f"{prefix}1"
-        
-        # Dynamische Prüfung auf Komma oder Semikolon
+
         delim = ';' if ';' in lines[0] else ','
         reader = csv.DictReader(lines, delimiter=delim)
         
         for row in reader:
             if not reader.fieldnames: continue
-            # Wir nehmen immer die erste Spalte (ID)
             id_val = str(row.get(reader.fieldnames[0], '')).strip().upper()
             
             if game_type == 'DOOM':
-                # Suche nach reinen Zahlen (deine Bestands-IDs)
                 if id_val.isdigit():
                     ids.append(int(id_val))
             else:
-                # Suche nach Präfix (H oder HX)
                 if id_val.startswith(prefix):
                     num_part = id_val[len(prefix):]
                     if num_part.isdigit():
@@ -232,7 +212,6 @@ def get_next_id(game_type):
 
 def run_installer():
     INSTALL_DIR = os.path.join(BASE_DIR, "Install")
-    # Hier nutzen wir die globale Variable CSV_FILE, die du oben definiert hast
     target_csv = CSV_FILE 
 
     if not os.path.exists(INSTALL_DIR):
@@ -251,7 +230,6 @@ def run_installer():
     print(f"\n {Colors.CYAN}--- INSTALLATION LÄUFT ---{Colors.WHITE}")
     installed_count = 0
 
-    # Phase 1: Entpacken und Sortieren
     for item in items:
         item_path = os.path.join(INSTALL_DIR, item)
         if os.path.isfile(item_path):
@@ -274,14 +252,12 @@ def run_installer():
                 os.makedirs(tmp_f, exist_ok=True)
                 shutil.move(item_path, os.path.join(tmp_f, item))
 
-    # Phase 2: In PWAD Ordner verschieben und CSV-Eintrag erstellen
     folders = [d for d in os.listdir(INSTALL_DIR) if os.path.isdir(os.path.join(INSTALL_DIR, d))]
     for folder in folders:
         full_path = os.path.join(INSTALL_DIR, folder)
         m_name = folder.replace("_", " ")
         m_core = "doom2.wad"
-        
-        # Basis-Spiel ermitteln
+
         txt_files = [f for f in os.listdir(full_path) if f.lower().endswith(".txt")]
         if txt_files:
             try:
@@ -302,7 +278,6 @@ def run_installer():
         if not os.path.exists(target_path):
             shutil.move(full_path, target_path)
             
-            # 1. Spieltyp für die ID-Vergabe bestimmen
             if "heretic.wad" in m_core.lower():
                 game_type = 'HERETIC'
                 kat = "EXTRA"
@@ -315,20 +290,17 @@ def run_installer():
 
             # 2. Neue ID generieren
             new_id = get_next_id(game_type)
-            
-            # 3. FIX: Sicherstellen, dass die CSV-Datei mit einer neuen Zeile endet
+
             if os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 0:
                 with open(CSV_FILE, 'rb+') as f:
                     f.seek(-1, os.SEEK_END)
                     if f.read(1) != b'\n':
                         f.write(b'\n')
-            
-            # 4. In die CSV schreiben
+
             with open(CSV_FILE, 'a', newline='', encoding='utf-8') as csvfile:
                 fieldnames = ["ID", "Name", "IWAD", "Ordner", "MOD", "ARGS", "Kategorie", "Playtime", "LastPlayed"]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                
-                # Falls Datei leer ist, Header schreiben
+
                 if os.path.getsize(CSV_FILE) == 0:
                     writer.writeheader()
                     
@@ -374,7 +346,6 @@ def load_maps():
         reader = csv.DictReader(f, dialect=dialect)
         
         for row in reader:
-            # --- SICHERER DATEN-ABRUF (Verhindert den Absturz) ---
             def safe_get(keys, default=""):
                 if isinstance(keys, str): keys = [keys]
                 for k in keys:
@@ -383,7 +354,6 @@ def load_maps():
                         return str(val).strip()
                 return default
 
-            # Wir nutzen safe_get für alle Felder
             entry_id = safe_get('ID')
             name     = safe_get('Name', 'Unbekannt')
             core     = safe_get(['Core', 'IWAD'])
@@ -392,8 +362,7 @@ def load_maps():
             if not mods: mods = "0"
             extra    = safe_get(['Extra', 'ARGS'])
             cat      = safe_get('Kategorie').upper()
-            
-            # --- Deine Kategorisierungs-Logik ---
+
             if not cat:
                 if "heretic" in core.lower() or "hexen" in core.lower():
                     cat = "EXTRA"
@@ -401,8 +370,7 @@ def load_maps():
                     cat = "PWAD"
                 else:
                     cat = "IWAD"
-            
-            # --- Playtime auslesen und formatieren ---
+
             try:
                 play_val = row.get('Playtime', '0')
                 playtime_min = int(play_val) if play_val and str(play_val).isdigit() else 0
@@ -429,8 +397,6 @@ def load_maps():
             if ordner: remaining.append(ordner)
             remaining.append(mods)
             if extra: remaining.extend(extra.split())
-            
-            # Zuordnung zu den Blocks (Tupel-Struktur beibehalten)
             if cat == 'IWAD':
                 blocks[1].append((display_text, entry_id, core, name, remaining, 1))
             elif cat == 'PWAD':
@@ -438,7 +404,6 @@ def load_maps():
             elif cat in ['EXTRA', 'HERETIC', 'HEXEN']:
                 blocks[3].append((display_text, entry_id, core, name, remaining, 3))
 
-        # --- Deine Präfix-Optimierung für Block 3 ---
         formatted_col4 = []
         last_prefix = None
         
@@ -459,11 +424,8 @@ def load_maps():
 
 def initial_setup():
     setup_activity = False
-    
-    # Kurz das Terminal leeren für eine saubere Setup-Ansicht
     clear_screen()
-    
-    # 1. Ordner prüfen und bei Bedarf erstellen
+
     required_dirs = [
         "iwad", "pwad", "mods", 
         os.path.join("mods", "doom"), 
@@ -481,18 +443,14 @@ def initial_setup():
             print(f"  {Colors.GREEN}[+]{Colors.WHITE} Ordner erstellt: {Colors.YELLOW}{d}{Colors.WHITE}")
             setup_activity = True
 
-    # 2. CSV-Datei prüfen und bei Bedarf mit Standardwerten erstellen
     if not os.path.exists(CSV_FILE):
         with open(CSV_FILE, 'w', encoding='utf-8', newline='') as f:
-            # NEU: Der Header enthält jetzt Playtime und LastPlayed
             f.write("ID,Name,IWAD,Ordner,MOD,ARGS,Kategorie,Playtime,LastPlayed\n")
-            # NEU: Die Standard-Einträge haben jetzt eine 0 für Playtime und ein "-" für LastPlayed
             f.write("1,Ultimate Doom,doom.wad,0,0,,IWAD,0,-\n")
             f.write("2,Doom II: Hell on Earth,doom2.wad,0,0,,IWAD,0,-\n")
         print(f"  {Colors.GREEN}[+]{Colors.WHITE} Standard-Datenbank erstellt: {Colors.YELLOW}maps.csv{Colors.WHITE}")
         setup_activity = True
 
-    # 3. Engine (uzdoom.exe) prüfen
     if not os.path.exists(UZ):
         print(f"  {Colors.RED}[!] WICHTIG: UzDoom Engine fehlt!{Colors.WHITE}")
         dl_choice = input(f"      Möchtest du UZDoom jetzt automatisch herunterladen? (j/n): ").strip().lower()
@@ -502,7 +460,6 @@ def initial_setup():
             print(f"      Bitte entpacke die {Colors.CYAN}uzdoom.exe{Colors.WHITE} manuell in den Ordner '{Colors.YELLOW}UzDoom{Colors.WHITE}'.")
         setup_activity = True
 
-    # 4. IWADs (Basisspiele) prüfen
     iwad_path = os.path.join(BASE_DIR, "iwad")
     iwads_found = [f for f in os.listdir(iwad_path) if f.lower().endswith(('.wad', '.pk3'))] if os.path.exists(iwad_path) else []
     
@@ -511,7 +468,6 @@ def initial_setup():
         print(f"      Bitte kopiere z.B. {Colors.CYAN}doom.wad{Colors.WHITE} oder {Colors.CYAN}doom2.wad{Colors.WHITE} in den Ordner '{Colors.YELLOW}iwad{Colors.WHITE}'.")
         setup_activity = True
 
-# 5. Spielzeit-Tracker (total_time.txt) prüfen
     time_file = os.path.join(BASE_DIR, "total_time.txt")
     if not os.path.exists(time_file):
         with open(time_file, 'w', encoding='utf-8') as f:
@@ -519,14 +475,12 @@ def initial_setup():
         print(f"  {Colors.GREEN}[+]{Colors.WHITE} Spielzeit-Tracker erstellt: {Colors.YELLOW}total_time.txt{Colors.WHITE}")
         setup_activity = True
 
-    # Wenn etwas neu erstellt oder eine Warnung ausgegeben wurde, warten wir kurz auf den Nutzer
     if setup_activity:
         print(f"\n {Colors.CYAN}---------------------------------------{Colors.WHITE}")
         print(f" {Colors.YELLOW}Einrichtung abgeschlossen oder Hinweise gefunden.{Colors.WHITE}")
         input(f" {Colors.WHITE}Drücke {Colors.GREEN}ENTER{Colors.WHITE}, um den Launcher zu starten... ")
 
 def fetch_doom_api(url, raw=False):
-    """ Hilfsfunktion: Holt Daten und stellt sicher, dass immer eine Liste oder ein Dict zurückkommt """
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         req = urllib.request.Request(url, headers=headers)
@@ -546,26 +500,6 @@ def fetch_doom_api(url, raw=False):
         return [] if not raw else {}
 
 def fetch_folder_files(folder_name):
-    """ Hilfsfunktion: Holt alle Dateien aus einem Ordner über die API """
-    url = f"https://www.doomworld.com/idgames/api/api.php?action=getcontents&name={folder_name}&out=json"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            content = data.get('content', {})
-            # Wir sammeln Dateien (file) und Unterordner (dir)
-            files = content.get('file', [])
-            if isinstance(files, dict): files = [files]
-            
-            subdirs = content.get('dir', [])
-            if isinstance(subdirs, dict): subdirs = [subdirs]
-            
-            return files, subdirs
-    except:
-        return [], []
-
-def fetch_folder_files(folder_name):
-    """ Holt Dateien und Unterordner. Garantiert immer zwei Listen als Rückgabe. """
     url = f"https://www.doomworld.com/idgames/api/api.php?action=getcontents&name={folder_name}&out=json"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -574,12 +508,10 @@ def fetch_folder_files(folder_name):
             content = data.get('content', {})
             if not content: return [], []
             
-            # Files extrahieren & absichern
             f = content.get('file', [])
             if f is None: f = []
             if isinstance(f, dict): f = [f]
-            
-            # Dirs extrahieren & absichern
+
             d = content.get('dir', [])
             if d is None: d = []
             if isinstance(d, dict): d = [d]
@@ -589,23 +521,19 @@ def fetch_folder_files(folder_name):
         return [], []
 
 def get_engine_path():
-    """ Sucht die .exe im Engine-Ordner im Root-Verzeichnis (z.B. uzdoom/uzdoom.exe) """
     exe_name = f"{CURRENT_ENGINE}.exe"
-    
-    # Pfad-Struktur: ./uzdoom/uzdoom.exe
+
     path_in_folder = os.path.join(CURRENT_ENGINE, exe_name)
     
     if os.path.exists(path_in_folder):
         return path_in_folder
-    
-    # Fallback: Falls die exe doch direkt im Root ohne Ordner liegt
+
     if os.path.exists(exe_name):
         return exe_name
         
-    return exe_name # Fallback auf System-Umgebung
+    return exe_name
 
 def select_engine():
-    """ Menü zur Engine-Wahl """
     global CURRENT_ENGINE
     while True:
         clear_screen()
@@ -615,7 +543,6 @@ def select_engine():
         found = []
         for i, eng in enumerate(SUPPORTED_ENGINES):
             exe_n = f"{eng}.exe"
-            # Wir prüfen: ./name/name.exe ODER direkt im Root
             path_check = os.path.join(eng, exe_n)
             is_ready = os.path.exists(path_check) or os.path.exists(exe_n)
             
@@ -632,6 +559,23 @@ def select_engine():
             save_settings()
             break
 
+def get_installed_pwads():
+    installed = []
+
+    if os.path.exists(PWAD_DIR):
+        for root, dirs, files in os.walk(PWAD_DIR):
+            for f in files:
+                if f.lower().endswith(('.wad', '.pk3', '.zip', '.pk7')):
+                    installed.append(f.lower())
+
+    if os.path.exists(IWAD_DIR):
+         for root, dirs, files in os.walk(IWAD_DIR):
+             for f in files:
+                 if f.lower().endswith(('.wad', '.pk3')):
+                     installed.append(f.lower())
+                     
+    return installed
+
 def search_doomworld():
     print(f"\n  {Colors.MAGENTA}--- DOOMWORLD ONLINE-ARCHIV ---{Colors.WHITE}")
     print(f"  {Colors.YELLOW}[1]{Colors.WHITE} Manuelle Suche (Name/Titel)")
@@ -642,8 +586,7 @@ def search_doomworld():
     if not choice: return
 
     all_results = []
-    
-    # --- DATENBESCHAFFUNG ---
+
     if choice == '1':
         query = input(f"  Suchbegriff: ").strip()
         if not query: return
@@ -662,11 +605,8 @@ def search_doomworld():
         
         print(f"  {Colors.GRAY}Synchronisiere mit Doomworld... bitte warten...{Colors.WHITE}")
         for folder in main_folders:
-            # 1. Dateien im Hauptordner
             files, subdirs = fetch_folder_files(folder)
             if files: all_results.extend(files)
-            
-            # 2. Unterordner scannen (A-Z)
             if subdirs:
                 for sd in subdirs:
                     if sd and 'name' in sd:
@@ -680,11 +620,12 @@ def search_doomworld():
         print(f"  {Colors.RED}[!] Keine Karten gefunden.{Colors.WHITE}")
         input("  ENTER..."); return
 
-    # --- SORTIERUNG & NAVIGATION (PAGINATION) ---
     all_results.sort(key=lambda x: float(x.get('rating', 0) or 0), reverse=True)
 
     page_size = 50  # Karten pro Seite
     current_start = 0
+
+    installed_files = get_installed_pwads()
 
     while True:
         clear_screen()
@@ -692,14 +633,17 @@ def search_doomworld():
         current_end = min(current_start + page_size, total)
         
         print(f"\n  {Colors.MAGENTA}--- DOOMWORLD ERGEBNISSE ({current_start + 1} bis {current_end} von {total}) ---{Colors.WHITE}")
-        print(f"  {'#':<4} {'Titel':<40} {'Größe':<10} {'Rating'}")
-        print(f"  {'-' * 72}")
+        print(f"  {'#':<4} {'Titel':<56} {'Größe':<10} {'Rating':<16} {'Status'}")
+        print(f"  {'-' * 100}") # Die Linie etwas länger machen
 
-        # Aktuellen Block anzeigen
         for i in range(current_start, current_end):
             res = all_results[i]
             title = res.get('title') or res.get('filename') or 'Unbekannt'
-            title = str(title)[:39]
+            title = str(title)[:54] 
+            
+            raw_filename = str(res.get('filename', '')).lower()
+            filename = raw_filename.split('/')[-1] 
+            base_name = os.path.splitext(filename)[0]
             
             try:
                 size_bytes = int(res.get('size', 0))
@@ -712,10 +656,22 @@ def search_doomworld():
             
             stars = "★" * int(r_val)
             if r_val % 1 >= 0.5: stars += "½"
-            
-            print(f"  {Colors.YELLOW}[{i+1:<3}]{Colors.WHITE} {title:<40} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.GREEN}{stars:<10}{Colors.WHITE}")
 
-        # Navigationstipps
+            is_installed = False
+            if filename in installed_files:
+                is_installed = True
+            else:
+                base_name = os.path.splitext(filename)[0]
+                if any(base_name in f for f in installed_files):
+                    is_installed = True
+
+            if is_installed:
+                # Komplett grün, Sterne haben festen Platz (<15), schlichtes [INSTALLIERT] am Ende
+                print(f"  {Colors.GREEN}[{i+1:<3}]{Colors.WHITE} {title:<55} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.GREEN}{stars:<15} [INSTALLIERT]{Colors.WHITE}")
+            else:
+                # Normal gelb, kein Text am Ende
+                print(f"  {Colors.YELLOW}[{i+1:<3}]{Colors.WHITE} {title:<55} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.YELLOW}{stars:<15}{Colors.WHITE}")
+
         print(f"\n  {Colors.MAGENTA}Navigation:{Colors.WHITE}")
         nav_options = []
         if current_end < total:
@@ -737,21 +693,28 @@ def search_doomworld():
         elif sel.isdigit():
             idx = int(sel) - 1
             if 0 <= idx < total:
+                raw_filename = str(all_results[idx].get('filename', '')).lower()
+                selected_filename = raw_filename.split('/')[-1]
+                base = os.path.splitext(selected_filename)[0]
+
+                if any(base in f for f in installed_files):
+                    print(f"  {Colors.CYAN}[INFO] Diese Datei ist bereits installiert.{Colors.WHITE}")
+                    time.sleep(1.5)
+                    continue
+                
                 download_idgames(all_results[idx])
-                break # Nach Download zurück zum Hauptmenü
+                break
             else:
                 print(f"  {Colors.RED}[!] Ungültige Nummer.{Colors.WHITE}")
                 time.sleep(1)
 
 def download_idgames(file_data):
-    TEMP_DIR = "install"  # Nur noch als Zwischenspeicher
-    FINAL_DIR = "pwad"    # Das eigentliche Ziel für deine Mods
-    
-    # Sicherstellen, dass beide Ordner existieren
+    TEMP_DIR = "install" 
+    FINAL_DIR = "pwad"
+
     for d in [TEMP_DIR, FINAL_DIR]:
         if not os.path.exists(d): os.makedirs(d)
 
-    # 1. Daten vorbereiten
     filename = file_data.get('filename')
     folder_name = os.path.splitext(filename)[0]
     title = (file_data.get('title') or filename).replace(',', ' ')
@@ -759,19 +722,16 @@ def download_idgames(file_data):
     temp_extract_path = os.path.join(TEMP_DIR, folder_name)
     final_mod_path = os.path.join(FINAL_DIR, folder_name)
 
-    # --- DUBLETTEN-PRÜFUNG im Zielordner ---
     if os.path.exists(final_mod_path):
         print(f"\n  {Colors.YELLOW}[Info]{Colors.WHITE} '{folder_name}' existiert bereits im {FINAL_DIR}-Ordner.")
         if input(f"  Überschreiben? (j/N): ").lower() != 'j': return
 
-    # --- CSV-PRÜFUNG ---
     is_already_in_csv = False
     if os.path.exists(CSV_FILE):
         with open(CSV_FILE, 'r', encoding='utf-8-sig') as f:
             if folder_name.lower() in f.read().lower():
                 is_already_in_csv = True
 
-    # Spieltyp bestimmen
     api_dir = file_data.get('dir', '').lower()
     if "heretic" in api_dir:
         game_type, core_wad, category = 'HERETIC', "heretic.wad", "EXTRA"
@@ -781,7 +741,6 @@ def download_idgames(file_data):
         game_type, core_wad, category = 'DOOM', ("doom2.wad" if "doom2" in api_dir else "doom.wad"), "PWAD"
 
     try:
-        # 2. Download in den TEMP-Ordner
         zip_temp_path = os.path.join(TEMP_DIR, filename)
         print(f"\n  {Colors.CYAN}Lade herunter:{Colors.WHITE} {title}...")
         req = urllib.request.Request(f"https://youfailit.net/pub/idgames/{file_data.get('dir')}{filename}", 
@@ -789,24 +748,19 @@ def download_idgames(file_data):
         with urllib.request.urlopen(req) as response, open(zip_temp_path, 'wb') as out_file:
             out_file.write(response.read())
 
-        # 3. Entpacken im TEMP-Ordner
         print(f"  {Colors.YELLOW}Entpacke...{Colors.WHITE}")
         with zipfile.ZipFile(zip_temp_path, 'r') as zip_ref:
             zip_ref.extractall(temp_extract_path)
         
-        # ZIP sofort löschen
         os.remove(zip_temp_path)
 
-        # 4. VERSCHIEBEN in den PWAD-Ordner (Wichtig!)
         print(f"  {Colors.GREEN}Verschiebe nach:{Colors.WHITE} {final_mod_path}")
         if os.path.exists(final_mod_path):
-            shutil.rmtree(final_mod_path) # Alten Ordner löschen falls vorhanden
+            shutil.rmtree(final_mod_path)
         shutil.move(temp_extract_path, final_mod_path)
 
-        # 5. CSV-Eintrag schreiben
         if not is_already_in_csv:
             new_id = get_next_id(game_type)
-            # Format: ID, Name, Core, Ordner, Mods, Extra, Kategorie, Playtime, Status
             csv_row = [str(new_id), title, core_wad, folder_name, "0", "", category, "0", "-"]
             
             with open(CSV_FILE, 'a+', newline='', encoding='utf-8-sig') as f:
@@ -823,24 +777,15 @@ def download_idgames(file_data):
         input("\n  Installation fertig & install-Ordner bereinigt. ENTER...")
 
     except Exception as e:
-        print(f"\n  {Colors.RED}[!] Fehler:{Colors.WHITE} {str(e)}")
-        # Aufräumen falls was schief ging
-        if os.path.exists(temp_extract_path): shutil.rmtree(temp_extract_path)
-        input("  Drücke ENTER...")
-
-    except Exception as e:
-        print(f"\n  {Colors.RED}[!] Fehler:{Colors.WHITE} {str(e)}")
-        if os.path.exists(zip_path): os.remove(zip_path)
-        input("  Drücke ENTER...")
+            print(f"  {Colors.RED}[!] Fehler beim Download/Entpacken: {e}{Colors.WHITE}")
+            if 'zip_temp_path' in locals() and os.path.exists(zip_temp_path):
+                os.remove(zip_temp_path)
 
 SETTINGS_FILE = "settings.json"
 
 def load_settings():
     global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS
     config = configparser.ConfigParser()
-    
-    # 1. Zuerst Defaults setzen, falls die Datei fehlt
-    # (Diese Variablen müssen oben im Skript existieren!)
     
     if os.path.exists(CONFIG_FILE):
         try:
@@ -879,22 +824,18 @@ def main():
     last_error = ""
 
     while True:
+        cmd_line = ""
         blocks = load_maps()
-        
-        # --- Dynamische Spaltenbreite berechnen ---
+
         dynamic_col_width = 35 
         for block in blocks.values():
             for item in block:
                 if item[0] != "EMPTY":
-                    # Nutzt unsere real_len Funktion, um die echte Länge zu messen
                     length = real_len(item[0]) 
                     if length > dynamic_col_width:
                         dynamic_col_width = length
-                        
-        # Wir fügen 4 Leerzeichen als Puffer hinzu, damit es nicht gequetscht aussieht
+
         dynamic_col_width += 4 
-        
-        # Die Terminal-Breite berechnet sich nun aus: (4 Spalten * Spaltenbreite) + etwas Rand
         terminal_width = (dynamic_col_width * 4) + 15
         
         resize_terminal(terminal_width, 60)
@@ -926,21 +867,17 @@ def main():
                 if item and item[0] != "EMPTY" and item[1] == last_id:
                     last_name = item[3]
 
-        # Header
         print(f"\n {Colors.CYAN}{'='*term_width}")
-        print(f"      I W A D S                                   | P W A D S                                     | P W A D S                                            | H E R E T I C / H E X E N / W O L F")
+        print(f"                I W A D S                                 | P W A D S                                             | P W A D S                                             | H E R E T I C / H E X E N / W O L F")
         print(f" {'='*term_width}{Colors.WHITE}")
 
         max_idx = max(25, len(col1), len(col2), len(col3), len(col4_raw))
-        
-        # Mod-Zählung
         mod_count = 0
         for s in ["doom", "heretic", "hexen", "wolfenstein"]:
             p = os.path.join(BASE_DIR, "mods", s)
             if os.path.isdir(p):
                 mod_count += len([d for d in os.listdir(p) if os.path.isdir(os.path.join(p, d))])
 
-        # Zeilen ausgeben
         for i in range(max_idx):
             c1 = col1[i][0] if i < len(col1) else ""
             c2 = col2[i][0] if i < len(col2) and col2[i] else ""
@@ -949,21 +886,16 @@ def main():
             
             c4 = c4_data[0] if c4_data and c4_data[0] != "EMPTY" else ""
             b4 = c4_data[-1] if c4_data else 3
-            
-            # Padding und "Last Played" Marker
+
             def format_col(text, width, color, is_last):
                 if not text: return " " * width
-                
-                # Basis-Text ohne unsichtbare Längen
+
                 base_text = f"{text}{' [L]' if is_last else ''}"
-                
-                # Füllzeichen berechnen basierend auf der ECHTEN Länge
                 padding_needed = width - real_len(base_text)
                 if padding_needed < 0: padding_needed = 0
                 
                 padded = base_text + (" " * padding_needed)
-                
-                # JETZT ERST die Farben hinzufügen
+
                 if is_last:
                     padded = padded.replace("[L]", f"{Colors.MAGENTA}[L]{color}")
                 if " [C]" in padded:
@@ -974,8 +906,7 @@ def main():
             f1 = format_col(c1, dynamic_col_width, Colors.RED, c1.startswith(last_id + " -") if last_id else False)
             f2 = format_col(c2, dynamic_col_width, Colors.GREEN, c2.startswith(last_id + " -") if last_id else False)
             f3 = format_col(c3, dynamic_col_width, Colors.GREEN, c3.startswith(last_id + " -") if last_id else False)
-            
-            # Farbe für Col4
+
             c4_color = Colors.GREEN
             if b4 == 3: c4_color = Colors.YELLOW
             elif b4 == 4: c4_color = Colors.CYAN
@@ -990,13 +921,11 @@ def main():
         upd_marker = f" {Colors.RED}[U] Update verfügbar{Colors.WHITE}" if update_available else ""
 
         print(f"\n {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
-        
-        # Schalter-Status vorbereiten
+
         m_on = f"{Colors.GREEN}ON{Colors.WHITE}" if USE_MODS else f"{Colors.RED}OFF{Colors.WHITE}"
         s_on = f"{Colors.GREEN}ON{Colors.WHITE}" if SHOW_STATS else f"{Colors.RED}OFF{Colors.WHITE}"
         d_on = f"{Colors.GREEN}ON{Colors.WHITE}" if DEBUG_MODE else f"{Colors.RED}OFF{Colors.WHITE}"
 
-        # Linker Teil: Statistiken & Engine (Fest verankert)
         len_extra = len([x for x in col4_raw if x[0] != 'EMPTY'])
         st_left = (f"    KARTEN: {Colors.GREEN}Gesamt: {total_maps}{Colors.WHITE} | "
                    f"{Colors.RED}IWAD: {len(col1)}{Colors.WHITE} | "
@@ -1005,34 +934,28 @@ def main():
                    f"{Colors.GRAY}│{Colors.WHITE}  {Colors.YELLOW}ZEIT: {display_time}{Colors.WHITE}  "
                    f"{Colors.GRAY}│{Colors.WHITE}  MODS: {Colors.YELLOW}{mod_count}{Colors.WHITE}  "
                    f"{Colors.GRAY}│{Colors.WHITE}  {Colors.BLUE}UZDoom {CUR_VERSION}{upd_marker}{Colors.WHITE}")
-        
-        # Rechter Teil: Deine neuen langen Beschreibungen
-        # Dieser Teil "wächst" jetzt nach links
+
         st_right = (f" {Colors.YELLOW}[/M] Mod-Menu {m_on}  "
                     f"[/S] Statistiken {s_on}  "
                     f"[/D] DebugMenu {d_on}{Colors.WHITE}    ")
 
-        # --- PRÄZISE BERECHNUNG DER RECHTSBÜNDIGKEIT ---
-        # Wir messen die tatsächliche Breite der Buchstaben ohne die unsichtbaren Farbcodes
         raw_l = f"    KARTEN: Gesamt: {total_maps} | IWAD: {len(col1)} | PWAD: {len(pwads)} | Heretic / Hexen: {len_extra}  │  ZEIT: {display_time}  │  MODS: {mod_count}  │  UZDoom {CUR_VERSION}{' [U]' if update_available else ''}"
         raw_r = f" [/M] Mod-Menu {'ON' if USE_MODS else 'OFF'}  [/S] Statistiken {'ON' if SHOW_STATS else 'OFF'}  [/D] DebugMenu {'ON' if DEBUG_MODE else 'OFF'}    "
-        
-        # Das Padding ist der restliche Platz. Wenn es eng wird, schrumpft dieser Wert auf 1.
+
         pad_stat = term_width - len(raw_l) - len(raw_r)
-        
-        # Falls das Fenster ZU schmal ist, kürzen wir die linke Seite leicht ab (Notlösung)
+
         if pad_stat < 1: 
             pad_stat = 1
-        
-        # Ausgabe: Linksbündiger Teil + dynamischer Leerraum + Rechtsbündiger Teil
+
         print(f"{st_left}{' ' * pad_stat}{st_right}")
         print(f" {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
         print()
 
-        # --- BEFEHLSZEILE (Ganz unten) ---
         if last_id:
             cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Installer  [S] Suche{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}" + (f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}" if last_id else "")
-        
+        else:
+            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Installer  [S] Suche{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
+
         print(cmd_line)
         print()
         
@@ -1050,12 +973,15 @@ def main():
             continue
         if choice == '0':
             sys.exit(0)
+        if choice == '' or choice == 'l':
+            if last_id:
+                choice = str(last_id)
+            else:
+                continue
 
-        # --- DIESER BLOCK MUSS VOR ALLEM ANDEREN KOMMEN ---
         if choice.endswith('c') and len(choice) > 1:
             target_id = choice[:-1].upper()
             if toggle_map_clear(target_id):
-                # Die while-Schleife startet von vorne und lädt alles automatisch neu!
                 continue
             else:
                 last_error = f"ID '{target_id}' nicht gefunden!"
@@ -1078,7 +1004,6 @@ def main():
             print(f"    {Colors.YELLOW}Script wird neu gestartet...{Colors.WHITE}")
             subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "doom.py")], creationflags=subprocess.CREATE_NEW_CONSOLE)
             sys.exit(0)
-            # --- ZUFALLSKARTE ---
         if choice == '?':
             all_valid_maps = []
             for block in blocks.values():
@@ -1261,13 +1186,9 @@ def launch_game(map_data):
     log_file = os.path.join(BASE_DIR, "logfile.txt")
     start_time = datetime.now()
     
- # --- NEU: Dynamische Engine-Wahl (Diese Zeile muss eingerückt sein!) ---
     engine_exe = get_engine_path() 
-
-    # Befehl zusammenbauen
     cmd = [engine_exe, "+logfile", "logfile.txt", "-iwad", os.path.join(IWAD_DIR, core)] + file_params + mod_params + extra_params
 
-    # --- DEBUG SCHALTER ---
     if DEBUG_MODE:
         print(f"\n          {Colors.MAGENTA}=== DEBUG: VOLLSTÄNDIGER BEFEHL ==={Colors.WHITE}")
         debug_str = " ".join(cmd)
@@ -1279,7 +1200,6 @@ def launch_game(map_data):
             time.sleep(1.5)
             return
 
-    # Sicherheitsprüfung
     if not os.path.exists(engine_exe):
         print(f"\n {Colors.RED}Fehler: Engine '{CURRENT_ENGINE}' nicht gefunden unter:{Colors.WHITE}")
         print(f" {Colors.YELLOW}{engine_exe}{Colors.WHITE}")
@@ -1287,10 +1207,7 @@ def launch_game(map_data):
         time.sleep(4)
         return 
 
-    # Das Spiel starten
     subprocess.run(cmd)
-
-    # Zeitmessung und Statistik (Muss exakt unter subprocess stehen!)
     end_time = datetime.now()
     session_seconds = int((end_time - start_time).total_seconds())
     
@@ -1360,15 +1277,15 @@ def analyze_session(log_file, map_id, mapname, session_seconds):
         input()
 
 if __name__ == "__main__":
+    resize_terminal(110, 35)
     load_settings()
     try:
         main()
     except Exception as e:
-        # Falls das Programm abstürzt, wird der Fehler hier ausgegeben
         print("\n" + "="*50)
         print(f"ABSTURZ-BERICHT:")
         print("="*50)
         import traceback
-        traceback.print_exc() # Zeigt genau, in welcher Zeile es knallt
+        traceback.print_exc()
         print("="*50)
         input("\nDrücke ENTER, um dieses Fenster zu schließen...")
