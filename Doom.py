@@ -105,10 +105,10 @@ def toggle_map_clear(map_id):
             if not row: continue
             if row[0].strip().upper() == search_id:
                 found = True
-                if " [C]" in row[2]:
-                    row[2] = row[2].replace(" [C]", "")
+                if " [C]" in row[1]:
+                    row[1] = row[1].replace(" [C]", "")
                 else:
-                    row[2] = row[2] + " [C]"
+                    row[1] = row[1] + " [C]"
             rows.append(row)
     
     if found:
@@ -136,6 +136,73 @@ def format_time(total_seconds):
     m = math.floor((total_seconds % 3600) / 60)
     s = total_seconds % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
+
+def uninstall_map(map_id):
+    rows = []
+    map_to_delete = None
+
+    try:
+        with open(CSV_FILE, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            for row in reader:
+                if len(row) > 6 and row[0].strip().upper() == map_id:
+                    map_to_delete = row
+                else:
+                    rows.append(row)
+    except Exception as e:
+        print(f"  {Colors.RED}[!] Fehler beim Lesen der CSV: {e}{Colors.WHITE}")
+        time.sleep(2)
+        return False
+        
+    if not map_to_delete:
+        return False
+        
+    if map_to_delete[6].strip().upper() == 'IWAD':
+        print(f"\n  {Colors.RED}[!] Basis-Spiele (IWADs) können hier nicht gelöscht werden!{Colors.WHITE}")
+        time.sleep(2)
+        return True
+
+    # 2. Sicherheitsabfrage
+    name = map_to_delete[1].replace(" [C]", "")
+    filename = map_to_delete[3]
+    
+    print(f"\n  {Colors.RED}WARNUNG: Möchtest du die Karte '{name}' wirklich komplett löschen?{Colors.WHITE}")
+    confirm = input(f"  {Colors.YELLOW}Tippe 'JA' zum Bestätigen (oder ENTER zum Abbrechen): {Colors.WHITE}").strip()
+    
+    if confirm != 'JA':
+        print(f"  {Colors.GREEN}Abgebrochen. Nichts wurde gelöscht.{Colors.WHITE}")
+        time.sleep(1.5)
+        return True
+
+    base_name = os.path.splitext(filename)[0]
+    dir_path = os.path.join(PWAD_DIR, base_name)
+
+    if os.path.isdir(dir_path):
+        try:
+            shutil.rmtree(dir_path)
+        except Exception as e:
+            print(f"  {Colors.RED}Konnte Ordner nicht löschen: {e}{Colors.WHITE}")
+            
+    for root, dirs, files in os.walk(PWAD_DIR):
+        for f in files:
+            if f.lower() == filename.lower():
+                try:
+                    os.remove(os.path.join(root, f))
+                except: pass
+
+    try:
+        with open(CSV_FILE, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(rows)
+        print(f"  {Colors.GREEN}[✔] '{name}' wurde erfolgreich gelöscht!{Colors.WHITE}")
+        time.sleep(2)
+        return True
+    except Exception as e:
+        print(f"  {Colors.RED}[!] Fehler beim Schreiben der CSV: {e}{Colors.WHITE}")
+        time.sleep(2)
+        return False
 
 def check_update():
     try:
@@ -327,6 +394,7 @@ def run_installer():
     time.sleep(2)
 
 def load_maps():
+    import re  # Für die intelligente Sortierung von IDs wie HR1, HR10
     blocks = {1: [], 2: [], 3: []} 
     
     if not os.path.exists(CSV_FILE):
@@ -397,29 +465,44 @@ def load_maps():
             if ordner: remaining.append(ordner)
             remaining.append(mods)
             if extra: remaining.extend(extra.split())
-            if cat == 'IWAD':
-                blocks[1].append((display_text, entry_id, core, name, remaining, 1))
-            elif cat == 'PWAD':
-                blocks[2].append((display_text, entry_id, core, name, remaining, 2))
-            elif cat in ['EXTRA', 'HERETIC', 'HEXEN']:
-                blocks[3].append((display_text, entry_id, core, name, remaining, 3))
 
-        formatted_col4 = []
-        last_prefix = None
-        
-        for item in blocks[3]:
-            current_id = item[1]
-            # HX1 -> HX
-            current_prefix = str(current_id).rstrip("0123456789").upper()
+            item_tuple = (display_text, entry_id, core, name, remaining, 0) # Index 5 wird unten angepasst
             
-            if last_prefix and current_prefix != last_prefix:
-                formatted_col4.append(("EMPTY", "EMPTY", "", "", [], 3))
-                
-            formatted_col4.append(item)
-            last_prefix = current_prefix
+            if cat == 'IWAD':
+                blocks[1].append((*item_tuple[:5], 1))
+            elif cat == 'PWAD':
+                blocks[2].append((*item_tuple[:5], 2))
+            elif cat in ['EXTRA', 'HERETIC', 'HEXEN']:
+                blocks[3].append((*item_tuple[:5], 3))
+
+        def natural_sort_key(item):
+            eid = str(item[1]).upper()
+            match = re.match(r"([A-Z]+)([0-9]+)", eid)
+            if match:
+                return (match.group(1), int(match.group(2)))
+            return (eid, 0)
+
+        if blocks[3]:
+            blocks[3].sort(key=natural_sort_key)
+
+            formatted_col4 = []
+            last_prefix = None
             
-        blocks[3] = formatted_col4
+            for item in blocks[3]:
+                current_id = str(item[1]).upper()
+                # Extrahiere nur die Buchstaben (z.B. "HR")
+                prefix_match = re.match(r"([A-Z]+)", current_id)
+                current_prefix = prefix_match.group(1) if prefix_match else ""
+
+                if last_prefix is not None and current_prefix != last_prefix:
+                    # Platzhalter für die Leerzeile
+                    formatted_col4.append(("EMPTY", "EMPTY", "", "", [], 3))
+                    
+                formatted_col4.append(item)
+                last_prefix = current_prefix
                 
+            blocks[3] = formatted_col4
+                    
     return blocks
 
 def initial_setup():
@@ -577,10 +660,13 @@ def get_installed_pwads():
     return installed
 
 def search_doomworld():
-    print(f"\n  {Colors.MAGENTA}--- DOOMWORLD ONLINE-ARCHIV ---{Colors.WHITE}")
-    print(f"  {Colors.YELLOW}[1]{Colors.WHITE} Manuelle Suche (Name/Titel)")
-    print(f"  {Colors.YELLOW}[2]{Colors.WHITE} Top Megawads: {Colors.CYAN}Doom 1{Colors.WHITE}")
-    print(f"  {Colors.YELLOW}[3]{Colors.WHITE} Top Megawads: {Colors.CYAN}Doom 2{Colors.WHITE}")
+    clear_screen()
+    print(f"\n  {Colors.MAGENTA}--- DOOMWORLD (idgames) SUCHE ---{Colors.WHITE}")
+    print(f"  [{Colors.YELLOW}1{Colors.WHITE}] Manuelle Suche (Stichwort)")
+    print(f"  [{Colors.YELLOW}2{Colors.WHITE}] Doom Megawads (Top Rated)")
+    print(f"  [{Colors.YELLOW}3{Colors.WHITE}] Doom 2 Megawads (Top Rated)")
+    print(f"  [{Colors.YELLOW}4{Colors.WHITE}] Heretic Wads (Top Rated)")
+    print(f"  [{Colors.YELLOW}5{Colors.WHITE}] Hexen Wads (Top Rated)")
     
     choice = input(f"\n  Option wählen (ENTER zum Abbruch): ").strip()
     if not choice: return
@@ -600,8 +686,16 @@ def search_doomworld():
                 all_results = [res] if isinstance(res, dict) else res
         except: pass
 
-    elif choice in ['2', '3']:
-        main_folders = ["levels/doom/megawads/"] if choice == '2' else ["levels/doom2/megawads/", "levels/doom2/Ports/megawads/"]
+    elif choice in ['2', '3', '4', '5']:
+        if choice == '2':
+            main_folders = ["levels/doom/megawads/"]
+        elif choice == '3':
+            main_folders = ["levels/doom2/megawads/", "levels/doom2/Ports/megawads/"]
+        elif choice == '4':
+            main_folders = ["levels/heretic/", "levels/heretic/Ports/"]
+        elif choice == '5':
+            # Hexen ebenso
+            main_folders = ["levels/hexen/", "levels/hexen/Ports/"]
         
         print(f"  {Colors.GRAY}Synchronisiere mit Doomworld... bitte warten...{Colors.WHITE}")
         for folder in main_folders:
@@ -610,10 +704,16 @@ def search_doomworld():
             if subdirs:
                 for sd in subdirs:
                     if sd and 'name' in sd:
-                        sys.stdout.write(f"\r  Scanne: {sd['name'][-20:]}   ")
+                        folder_name = sd['name'].lower()
+                        if any(x in folder_name for x in ["deathmatch", "music", "skins", "sounds"]):
+                            continue
+                            
+                        sys.stdout.write(f"\r  Scanne: {sd['name'][-25:]}   ")
                         sys.stdout.flush()
                         s_files, _ = fetch_folder_files(sd['name'])
                         if s_files: all_results.extend(s_files)
+
+        all_results.sort(key=lambda x: float(x.get('rating', 0) or 0), reverse=True)
         print("\r" + " " * 60 + "\r", end="")
 
     if not all_results:
@@ -622,7 +722,7 @@ def search_doomworld():
 
     all_results.sort(key=lambda x: float(x.get('rating', 0) or 0), reverse=True)
 
-    page_size = 50  # Karten pro Seite
+    page_size = 50
     current_start = 0
 
     installed_files = get_installed_pwads()
@@ -633,13 +733,21 @@ def search_doomworld():
         current_end = min(current_start + page_size, total)
         
         print(f"\n  {Colors.MAGENTA}--- DOOMWORLD ERGEBNISSE ({current_start + 1} bis {current_end} von {total}) ---{Colors.WHITE}")
-        print(f"  {'#':<4} {'Titel':<56} {'Größe':<10} {'Rating':<16} {'Status'}")
-        print(f"  {'-' * 100}") # Die Linie etwas länger machen
+        
+        # --- TABELLEN-KOPF (Noch breiter, mit getrenntem Rating & Status) ---
+        print(f"  {Colors.MAGENTA}┌─────┬────────────────────────────────────────────────────────┬────────────┬──────────────────────────────────┐{Colors.WHITE}")
+        print(f"  {Colors.MAGENTA}│{Colors.WHITE} {'#':<3} {Colors.MAGENTA}│{Colors.WHITE} {'Titel':<54} {Colors.MAGENTA}│{Colors.WHITE} {'Größe':<10} {Colors.MAGENTA}│{Colors.WHITE} {'Rating':<16}{'Status':>16} {Colors.MAGENTA}│{Colors.WHITE}")
+        print(f"  {Colors.MAGENTA}├─────┼────────────────────────────────────────────────────────┼────────────┼──────────────────────────────────┤{Colors.WHITE}")
 
         for i in range(current_start, current_end):
             res = all_results[i]
             title = res.get('title') or res.get('filename') or 'Unbekannt'
-            title = str(title)[:54] 
+
+            title = str(title)
+            if len(title) > 54:
+                title = title[:51] + "..."
+            else:
+                title = title[:54] 
             
             raw_filename = str(res.get('filename', '')).lower()
             filename = raw_filename.split('/')[-1] 
@@ -657,18 +765,34 @@ def search_doomworld():
             stars = "★" * int(r_val)
             if r_val % 1 >= 0.5: stars += "½"
 
+            # --- CHECK: IST DIE KARTE INSTALLIERT? ---
             is_installed = False
-            base_name = os.path.splitext(filename)[0]
+            clean_filename = filename.lower()
+            
+            # 1. Der "Master-Check": Steht die Datei in der CSV?
+            if os.path.exists(CSV_FILE):
+                with open(CSV_FILE, 'r', encoding='utf-8-sig') as f:
+                    if base_name in f.read().lower():
+                        is_installed = True
+                        
+            # 2. Fallback: Liegt sie auf der Festplatte?
+            if not is_installed:
+                if clean_filename in [f.lower() for f in installed_files] or any(base_name in f.lower() for f in installed_files):
+                    is_installed = True
+                elif os.path.exists(os.path.join(PWAD_DIR, base_name)):
+                    is_installed = True
 
-            if filename in installed_files or any(base_name in f for f in installed_files):
-                is_installed = True
-            elif os.path.exists(os.path.join(PWAD_DIR, base_name)):
-                is_installed = True
-
+            # --- AUSGABE: RATING LINKSBÜNDIG (<16), STATUS RECHTSBÜNDIG (>16) ---
             if is_installed:
-                print(f"  {Colors.GREEN}[{i+1:<3}]{Colors.WHITE} {title:<55} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.GREEN}{stars:<15} [INSTALLIERT]{Colors.WHITE}")
+                # Komplette Zeile in GRÜN! Sterne links, [INSTALLIERT] ganz rechts am Rahmen.
+                row_col = Colors.GREEN
+                print(f"  {Colors.MAGENTA}│ {row_col}{i+1:<3}{Colors.MAGENTA} │ {row_col}{title:<54}{Colors.MAGENTA} │ {row_col}{size_mb:<10}{Colors.MAGENTA} │ {row_col}{stars:<16}{'[INSTALLIERT]':>16}{Colors.MAGENTA} │{Colors.WHITE}")
             else:
-                print(f"  {Colors.YELLOW}[{i+1:<3}]{Colors.WHITE} {title:<55} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.YELLOW}{stars:<15}{Colors.WHITE}")
+                # Noch nicht installiert. Leerraum auf der rechten Seite.
+                print(f"  {Colors.MAGENTA}│ {Colors.YELLOW}{i+1:<3}{Colors.MAGENTA} │ {Colors.WHITE}{title:<54}{Colors.MAGENTA} │ {Colors.CYAN}{size_mb:<10}{Colors.MAGENTA} │ {Colors.YELLOW}{stars:<16}{'':>16}{Colors.MAGENTA} │{Colors.WHITE}")
+
+        # --- TABELLEN-FUSS (Rahmen unten) ---
+        print(f"  {Colors.MAGENTA}└─────┴────────────────────────────────────────────────────────┴────────────┴──────────────────────────────────┘{Colors.WHITE}")
 
         print(f"\n  {Colors.MAGENTA}Navigation:{Colors.WHITE}")
         nav_options = []
@@ -695,7 +819,18 @@ def search_doomworld():
                 selected_filename = raw_filename.split('/')[-1]
                 base = os.path.splitext(selected_filename)[0]
 
-                if any(base in f for f in installed_files) or os.path.exists(os.path.join(PWAD_DIR, base)):
+                # --- CHECK BEIM DOWNLOAD: Ist sie schon installiert? ---
+                is_already_there = False
+                if os.path.exists(CSV_FILE):
+                    with open(CSV_FILE, 'r', encoding='utf-8-sig') as f:
+                        if base in f.read().lower():
+                            is_already_there = True
+                            
+                if not is_already_there:
+                    if any(base in f.lower() for f in installed_files) or os.path.exists(os.path.join(PWAD_DIR, base)):
+                        is_already_there = True
+
+                if is_already_there:
                     print(f"  {Colors.CYAN}[INFO] Diese Datei (oder der Ordner '{base}') ist bereits installiert.{Colors.WHITE}")
                     time.sleep(1.5)
                     continue
@@ -751,6 +886,21 @@ def download_idgames(file_data):
             zip_ref.extractall(temp_extract_path)
         
         os.remove(zip_temp_path)
+
+        if os.path.exists(temp_extract_path):
+            contents = os.listdir(temp_extract_path)
+            # Wenn es in dem entpackten Ordner EXAKT EIN Element gibt und das ein Ordner ist:
+            if len(contents) == 1:
+                single_item_path = os.path.join(temp_extract_path, contents[0])
+                if os.path.isdir(single_item_path):
+                    # Inhalt eine Ebene nach oben verschieben
+                    for item in os.listdir(single_item_path):
+                        src = os.path.join(single_item_path, item)
+                        dst = os.path.join(temp_extract_path, item)
+                        shutil.move(src, dst)
+                    # Den jetzt leeren Unterordner löschen
+                    os.rmdir(single_item_path)
+                    print(f"  {Colors.MAGENTA}[Info] Verschachtelten Unterordner '{contents[0]}' aufgelöst.{Colors.WHITE}")
 
         print(f"  {Colors.GREEN}Verschiebe nach:{Colors.WHITE} {final_mod_path}")
         if os.path.exists(final_mod_path):
@@ -892,7 +1042,7 @@ def main():
 
         print(f"\n {Colors.CYAN}{'='*term_width}")
         print(f"    {Colors.WHITE}{h1} {Colors.GRAY}|{Colors.WHITE} {h2} {Colors.GRAY}|{Colors.WHITE} {h3} {Colors.GRAY}| {Colors.WHITE}{h4}")
-        print(f" {'='*term_width}{Colors.WHITE}")
+        print(f" {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
 
         max_idx = max(25, len(col1), len(col2), len(col3), len(col4_raw))
         mod_count = 0
@@ -975,9 +1125,9 @@ def main():
         print()
 
         if last_id:
-            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Custom Map-Installer  [S] DoomWorld{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}" + (f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}" if last_id else "")
+            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld [ID]c Erledigt  [ID]x Löschen{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}" + (f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}" if last_id else "")
         else:
-            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Custom Map-Installer  [S] DoomWorld{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
+            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
 
         print(cmd_line)
         print()
@@ -1001,7 +1151,13 @@ def main():
                 choice = str(last_id)
             else:
                 continue
-
+        if choice.endswith('x') and len(choice) > 1:
+            target_id = choice[:-1].upper()
+            if uninstall_map(target_id):
+                continue
+            else:
+                last_error = f"ID '{target_id}' nicht gefunden!"
+                continue
         if choice.endswith('c') and len(choice) > 1:
             target_id = choice[:-1].upper()
             if toggle_map_clear(target_id):
@@ -1044,11 +1200,11 @@ def main():
                 last_error = "Keine Karten für Zufallsauswahl gefunden!"
             continue
             
-        if choice == 'i':
+        if choice == 'c':
             run_installer()
             continue
             
-        if choice == 's':
+        if choice == 'd':
             search_doomworld()
             continue
             
@@ -1095,32 +1251,49 @@ def launch_game(map_data):
     
     i = 0
     while i < len(remaining):
-        item = remaining[i].strip()
+        item = str(remaining[i]).strip()
         if not item:
             i += 1
             continue
-            
-        if item == "1": mod_flag = True
-        elif item == "0": mod_flag = False
+
+        if item == "1": 
+            mod_flag = True
+            i += 1
+        elif item == "0": 
+            mod_flag = False
+            i += 1
+
         elif item.startswith("-") or item.startswith("+"):
             extra_params.append(item)
-            if item.lower() in ["-config", "-warp", "-skill", "+map"] and i + 1 < len(remaining):
-                if item.lower() == "-config":
-                    extra_params.append(os.path.join(BASE_DIR, remaining[i+1].strip()))
+            i += 1
+            while i < len(remaining):
+                next_val = str(remaining[i]).strip()
+                if next_val and not (next_val.startswith("-") or next_val.startswith("+")):
+                    if item.lower() == "-config":
+                        extra_params.append(os.path.join(BASE_DIR, next_val))
+                    else:
+                        extra_params.append(next_val)
+                    i += 1
                 else:
-                    extra_params.append(remaining[i+1].strip())
-                i += 1
+                    break
+
         else:
             target_path = None
-            if os.path.exists(os.path.join(PWAD_DIR, item)): target_path = os.path.join(PWAD_DIR, item)
-            elif os.path.exists(os.path.join(IWAD_DIR, item)): target_path = os.path.join(IWAD_DIR, item)
-            elif os.path.exists(os.path.join(PWAD_DIR, item + ".wad")): target_path = os.path.join(PWAD_DIR, item + ".wad")
+            potential_paths = [
+                os.path.join(PWAD_DIR, item),
+                os.path.join(IWAD_DIR, item),
+                os.path.join(PWAD_DIR, item + ".wad")
+            ]
+            
+            for p in potential_paths:
+                if os.path.exists(p):
+                    target_path = p
+                    break
             
             if target_path:
                 if os.path.isdir(target_path):
                     valid_exts = (".wad", ".pk3", ".pk7", ".zip")
                     for f in os.listdir(target_path):
-                        # FIX: lower() hinzugefügt und Tuple statt verschachtelter Schleife
                         if f.lower().endswith(valid_exts):  
                             file_params.extend(["-file", os.path.join(target_path, f)])
                 else:
@@ -1132,7 +1305,7 @@ def launch_game(map_data):
                         auto_mod = os.path.join(sub_folder, item)
                     elif os.path.isdir(os.path.join(BASE_DIR, "mods", item)):
                         auto_mod = item
-        i += 1
+            i += 1
 
     mod_name = "Vanilla"
     mod_params = []
