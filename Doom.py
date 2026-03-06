@@ -658,18 +658,16 @@ def search_doomworld():
             if r_val % 1 >= 0.5: stars += "½"
 
             is_installed = False
-            if filename in installed_files:
+            base_name = os.path.splitext(filename)[0]
+
+            if filename in installed_files or any(base_name in f for f in installed_files):
                 is_installed = True
-            else:
-                base_name = os.path.splitext(filename)[0]
-                if any(base_name in f for f in installed_files):
-                    is_installed = True
+            elif os.path.exists(os.path.join(PWAD_DIR, base_name)):
+                is_installed = True
 
             if is_installed:
-                # Komplett grün, Sterne haben festen Platz (<15), schlichtes [INSTALLIERT] am Ende
                 print(f"  {Colors.GREEN}[{i+1:<3}]{Colors.WHITE} {title:<55} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.GREEN}{stars:<15} [INSTALLIERT]{Colors.WHITE}")
             else:
-                # Normal gelb, kein Text am Ende
                 print(f"  {Colors.YELLOW}[{i+1:<3}]{Colors.WHITE} {title:<55} {Colors.CYAN}{size_mb:<10}{Colors.WHITE} {Colors.YELLOW}{stars:<15}{Colors.WHITE}")
 
         print(f"\n  {Colors.MAGENTA}Navigation:{Colors.WHITE}")
@@ -697,8 +695,8 @@ def search_doomworld():
                 selected_filename = raw_filename.split('/')[-1]
                 base = os.path.splitext(selected_filename)[0]
 
-                if any(base in f for f in installed_files):
-                    print(f"  {Colors.CYAN}[INFO] Diese Datei ist bereits installiert.{Colors.WHITE}")
+                if any(base in f for f in installed_files) or os.path.exists(os.path.join(PWAD_DIR, base)):
+                    print(f"  {Colors.CYAN}[INFO] Diese Datei (oder der Ordner '{base}') ist bereits installiert.{Colors.WHITE}")
                     time.sleep(1.5)
                     continue
                 
@@ -777,9 +775,21 @@ def download_idgames(file_data):
         input("\n  Installation fertig & install-Ordner bereinigt. ENTER...")
 
     except Exception as e:
-            print(f"  {Colors.RED}[!] Fehler beim Download/Entpacken: {e}{Colors.WHITE}")
+        print(f"\n  {Colors.RED}[!] Fehler beim Download/Entpacken:{Colors.WHITE} {str(e)}")
+        
+        # Sicherer Aufräum-Versuch (ohne Absturz, falls Windows die Datei blockiert)
+        try:
             if 'zip_temp_path' in locals() and os.path.exists(zip_temp_path):
                 os.remove(zip_temp_path)
+        except: pass
+        
+        try:
+            if 'temp_extract_path' in locals() and os.path.exists(temp_extract_path):
+                shutil.rmtree(temp_extract_path)
+        except: pass
+            
+        # DIESE ZEILE HAT GEFEHLT: Die Pause, damit du den Fehler lesen kannst!
+        input(f"\n  {Colors.YELLOW}Drücke ENTER, um ins Menü zurückzukehren...{Colors.WHITE}")
 
 SETTINGS_FILE = "settings.json"
 
@@ -827,27 +837,6 @@ def main():
         cmd_line = ""
         blocks = load_maps()
 
-        dynamic_col_width = 35 
-        for block in blocks.values():
-            for item in block:
-                if item[0] != "EMPTY":
-                    length = real_len(item[0]) 
-                    if length > dynamic_col_width:
-                        dynamic_col_width = length
-
-        dynamic_col_width += 4 
-        terminal_width = (dynamic_col_width * 4) + 15
-        
-        resize_terminal(terminal_width, 60)
-        term_width = os.get_terminal_size().columns - 2
-        clear_screen()
-        os.system(f"title UZDoom Launcher - Python Edition")
-        
-        total_seconds = get_total_seconds()
-        display_time = format_time(total_seconds)
-        last_id = get_last_played()
-        last_name = ""
-        
         col1 = blocks[1]
         pwads = blocks[2]
         col4_raw = blocks[3]
@@ -861,14 +850,48 @@ def main():
                 col3.append(pwads[i + half])
             else:
                 col3.append(None)
+
+        def get_max_len(col):
+            max_l = 0
+            for item in col:
+                if item and item[0] != "EMPTY":
+                    l = real_len(item[0])
+                    if l > max_l: max_l = l
+            return max_l
+
+        w1 = max(25, get_max_len(col1) + 4)
+        w2 = max(25, get_max_len(col2) + 4)
+        w3 = max(25, get_max_len(col3) + 4)
+        w4 = max(35, get_max_len(col4_raw) + 4) 
+
+        terminal_width = w1 + w2 + w3 + w4 + 15
+        
+        resize_terminal(terminal_width, 60)
+        term_width = os.get_terminal_size().columns - 2
+        clear_screen()
+        os.system(f"title UZDoom Launcher - Python Edition")
+        
+        total_seconds = get_total_seconds()
+        display_time = format_time(total_seconds)
+        last_id = get_last_played()
+        last_name = ""
                 
         for block in blocks.values():
             for item in block:
                 if item and item[0] != "EMPTY" and item[1] == last_id:
                     last_name = item[3]
 
+        def format_head(text, width):
+            padding_needed = width - real_len(text)
+            return text + (" " * max(0, padding_needed))
+
+        h1 = format_head("I W A D S", w1)
+        h2 = format_head("P W A D S", w2)
+        h3 = format_head("P W A D S", w3)
+        h4 = "H E R E T I C / H E X E N / W O L F"
+
         print(f"\n {Colors.CYAN}{'='*term_width}")
-        print(f"                I W A D S                                 | P W A D S                                             | P W A D S                                             | H E R E T I C / H E X E N / W O L F")
+        print(f"    {Colors.WHITE}{h1} {Colors.GRAY}|{Colors.WHITE} {h2} {Colors.GRAY}|{Colors.WHITE} {h3} {Colors.GRAY}| {Colors.WHITE}{h4}")
         print(f" {'='*term_width}{Colors.WHITE}")
 
         max_idx = max(25, len(col1), len(col2), len(col3), len(col4_raw))
@@ -903,16 +926,16 @@ def main():
                     
                 return padded
 
-            f1 = format_col(c1, dynamic_col_width, Colors.RED, c1.startswith(last_id + " -") if last_id else False)
-            f2 = format_col(c2, dynamic_col_width, Colors.GREEN, c2.startswith(last_id + " -") if last_id else False)
-            f3 = format_col(c3, dynamic_col_width, Colors.GREEN, c3.startswith(last_id + " -") if last_id else False)
+            f1 = format_col(c1, w1, Colors.RED, c1.startswith(last_id + " -") if last_id else False)
+            f2 = format_col(c2, w2, Colors.GREEN, c2.startswith(last_id + " -") if last_id else False)
+            f3 = format_col(c3, w3, Colors.GREEN, c3.startswith(last_id + " -") if last_id else False)
 
             c4_color = Colors.GREEN
             if b4 == 3: c4_color = Colors.YELLOW
             elif b4 == 4: c4_color = Colors.CYAN
             elif b4 == 5: c4_color = Colors.WHITE
             
-            f4 = format_col(c4, dynamic_col_width, c4_color, c4.startswith(last_id + " -") if last_id else False)
+            f4 = format_col(c4, w4, c4_color, c4.startswith(last_id + " -") if last_id else False)
             display4 = f"{c4_color}{f4}{Colors.WHITE}" if c4 else ""
 
             print(f"    {Colors.RED}{f1}{Colors.WHITE} {Colors.GRAY}|{Colors.WHITE} {Colors.GREEN}{f2}{Colors.WHITE} {Colors.GRAY}|{Colors.WHITE} {Colors.GREEN}{f3}{Colors.WHITE} {Colors.GRAY}| {display4}")
@@ -952,15 +975,15 @@ def main():
         print()
 
         if last_id:
-            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Installer  [S] Suche{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}" + (f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}" if last_id else "")
+            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Custom Map-Installer  [S] DoomWorld{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}" + (f"    {Colors.YELLOW}Zuletzt gespielt: {Colors.CYAN}{last_id} - {last_name} {Colors.YELLOW}[L]{Colors.WHITE}" if last_id else "")
         else:
-            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Installer  [S] Suche{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
+            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [I] Custom Map-Installer  [S] DoomWorld{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
 
         print(cmd_line)
         print()
         
         if last_error:
-            print(f"    {Colors.RED}Fehler: ID '{Colors.YELLOW}{last_error}{Colors.RED}' ist ungültig.{Colors.WHITE}")
+            print(f"    {Colors.RED}Fehler: Eingabe '{Colors.YELLOW}{last_error}{Colors.RED}' ist ungültig.{Colors.WHITE}")
             last_error = ""
         else:
             print()
@@ -1004,6 +1027,7 @@ def main():
             print(f"    {Colors.YELLOW}Script wird neu gestartet...{Colors.WHITE}")
             subprocess.Popen([sys.executable, os.path.join(BASE_DIR, "doom.py")], creationflags=subprocess.CREATE_NEW_CONSOLE)
             sys.exit(0)
+            
         if choice == '?':
             all_valid_maps = []
             for block in blocks.values():
@@ -1019,17 +1043,15 @@ def main():
             else:
                 last_error = "Keine Karten für Zufallsauswahl gefunden!"
             continue
+            
         if choice == 'i':
             run_installer()
             continue
-        if choice == 'e':
-            select_engine()
+            
         if choice == 's':
             search_doomworld()
             continue
-        if choice == '0': sys.exit(0)    
-        if choice == 'l' and last_id:
-            choice = last_id
+            
         if choice == 'u' and update_available:
             os.system('start "" "https://github.com/m886/UzDoom/releases/latest"')
             continue
