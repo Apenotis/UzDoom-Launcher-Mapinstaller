@@ -1398,8 +1398,9 @@ def check_for_launcher_update(auto=False):
                         f"  {Colors.MAGENTA}[*] Backup deiner aktuellen Version erstellt: {os.path.basename(backup_path)}{Colors.WHITE}"
                     )
 
-                    with open(script_path, "w", encoding="utf-8") as f:
-                        f.write(remote_code)
+                    remote_code_fixed = remote_code.replace('\r\n', '\n')
+                    with open(script_path, 'w', encoding='utf-8') as f:
+                        f.write(remote_code_fixed)
 
                     print(f"  {Colors.GREEN}[+] Update erfolgreich!{Colors.WHITE}")
                     print(
