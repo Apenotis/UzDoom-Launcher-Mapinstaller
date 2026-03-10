@@ -415,11 +415,58 @@ def run_installer():
                     os.remove(item_path)
                 except Exception as e:
                     print(f"  {Colors.RED}[!] Fehler: {e}{Colors.WHITE}")
+            elif ext == "7z":
+                print(f"  {Colors.MAGENTA}[*]{Colors.WHITE} Entpacke 7Z: {item}...")
+                os.makedirs(tmp_f, exist_ok=True)
 
+                try:
+                    import py7zr
+                except ImportError:
+                    print(
+                        f"  {Colors.YELLOW}[*] Erstmalige Einrichtung: Lade 7-Zip Modul herunter...{Colors.WHITE}"
+                    )
+                    import subprocess
+                    import sys
+
+                    try:
+                        subprocess.check_call(
+                            [sys.executable, "-m", "pip", "install", "py7zr", "--quiet"]
+                        )
+                        import py7zr
+                    except Exception as e:
+                        print(
+                            f"  {Colors.RED}[!] Fehler beim automatischen Download: {e}{Colors.WHITE}"
+                        )
+                        input(
+                            f"\n  {Colors.YELLOW}Drücke ENTER zum Fortfahren...{Colors.WHITE}"
+                        )
+                        continue
+
+                try:
+                    with py7zr.SevenZipFile(item_path, mode="r") as z:
+                        z.extractall(path=tmp_f)
+                    os.remove(item_path)
+                except Exception as e:
+                    print(
+                        f"  {Colors.RED}[!] Fehler beim Entpacken der 7z: {e}{Colors.WHITE}"
+                    )
+                    input(
+                        f"\n  {Colors.YELLOW}Drücke ENTER zum Fortfahren...{Colors.WHITE}"
+                    )
             elif ext in ["wad", "pk3", "pk7"]:
                 print(f"  {Colors.MAGENTA}[*]{Colors.WHITE} Verpacke Datei: {item}...")
                 os.makedirs(tmp_f, exist_ok=True)
                 shutil.move(item_path, os.path.join(tmp_f, item))
+            else:
+                print(
+                    f"  {Colors.RED}[!] Übersprungen: '{item}' (Format nicht unterstützt){Colors.WHITE}"
+                )
+                print(
+                    f"  {Colors.GRAY}Hinweis: Bitte manuell entpacken. Der Installer schluckt nur .zip, .7z, .wad, .pk3, .pk7.{Colors.WHITE}"
+                )
+                input(
+                    f"\n  {Colors.YELLOW}Drücke ENTER zum Fortfahren...{Colors.WHITE}"
+                )
 
     folders = [
         d
@@ -428,6 +475,28 @@ def run_installer():
     ]
     for folder in folders:
         full_path = os.path.join(INSTALL_DIR, folder)
+
+        game_files = [
+            f
+            for f in os.listdir(full_path)
+            if f.lower().endswith((".wad", ".pk3", ".pk7"))
+        ]
+
+        if not game_files:
+            for item in os.listdir(full_path):
+                sub_path = os.path.join(full_path, item)
+                if os.path.isdir(sub_path):
+                    sub_files = [
+                        f
+                        for f in os.listdir(sub_path)
+                        if f.lower().endswith((".wad", ".pk3", ".pk7"))
+                    ]
+                    if sub_files:
+                        for sub_item in os.listdir(sub_path):
+                            shutil.move(os.path.join(sub_path, sub_item), full_path)
+                        os.rmdir(sub_path)
+                        break
+
         m_name = folder.replace("_", " ")
         m_core = "doom2.wad"
 
