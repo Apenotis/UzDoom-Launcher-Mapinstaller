@@ -1,5 +1,7 @@
 import configparser
 import csv
+import datetime
+import glob
 import json
 import math
 import os
@@ -12,6 +14,10 @@ import time
 import urllib.request
 import zipfile
 from datetime import datetime
+
+APP_VERSION = "1.0"
+UPDATE_URL = "https://raw.githubusercontent.com/Apenotis/UzDoom-Launcher-Mapinstaller/main/Doom.py"
+NEXT_UPDATE_CHECK = ""
 
 
 def download_uzdoom():
@@ -300,6 +306,77 @@ def check_update():
             return latest != CUR_VERSION, latest
     except Exception:
         return False, CUR_VERSION
+
+
+def update_launcher():
+    if UPDATE_URL == "HIER_KOMMT_DEIN_GITHUB_RAW_LINK_REIN":
+        print(
+            f"\n  {Colors.YELLOW}[!] Update-URL noch nicht eingerichtet.{Colors.WHITE}"
+        )
+        time.sleep(2)
+        return
+
+    print(f"\n  {Colors.CYAN}[*] Prüfe auf Launcher-Updates...{Colors.WHITE}")
+    try:
+        import re
+        import sys
+        import urllib.request
+
+        req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            remote_code = response.read().decode("utf-8")
+
+        match = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', remote_code)
+        if match:
+            remote_version = match.group(1)
+
+            if remote_version != APP_VERSION:
+                print(
+                    f"  {Colors.GREEN}[+] Neues Update gefunden! (Version {remote_version}){Colors.WHITE}"
+                )
+                print(f"  {Colors.GRAY}Aktuelle Version: {APP_VERSION}{Colors.WHITE}")
+
+                choice = (
+                    input(
+                        f"\n  {Colors.YELLOW}Möchtest du den Launcher jetzt aktualisieren? (j/n): {Colors.WHITE}"
+                    )
+                    .strip()
+                    .lower()
+                )
+                if choice == "j":
+                    # 1. BACKUP ERSTELLEN
+                    script_path = os.path.abspath(sys.argv[0])
+                    backup_path = f"{script_path}.bak_v{APP_VERSION}"
+                    shutil.copy2(script_path, backup_path)
+                    print(
+                        f"  {Colors.MAGENTA}[*] Backup erstellt: {os.path.basename(backup_path)}{Colors.WHITE}"
+                    )
+
+                    with open(script_path, "w", encoding="utf-8") as f:
+                        f.write(remote_code)
+
+                    print(
+                        f"  {Colors.GREEN}[+] Update erfolgreich installiert!{Colors.WHITE}"
+                    )
+                    print(
+                        f"  {Colors.YELLOW}[!] Der Launcher wird nun beendet. Bitte starte ihn neu!{Colors.WHITE}"
+                    )
+                    time.sleep(3)
+                    sys.exit(0)
+            else:
+                print(
+                    f"  {Colors.GREEN}[+] Du nutzt bereits die aktuellste Version ({APP_VERSION}).{Colors.WHITE}"
+                )
+                time.sleep(2)
+        else:
+            print(
+                f"  {Colors.RED}[!] Konnte Versionsnummer auf dem Server nicht finden.{Colors.WHITE}"
+            )
+            time.sleep(2)
+
+    except Exception as e:
+        print(f"  {Colors.RED}[!] Fehler beim Update-Check: {e}{Colors.WHITE}")
+        time.sleep(2)
 
 
 def get_last_played():
@@ -1235,11 +1312,8 @@ def download_idgames(file_data):
         )
 
 
-SETTINGS_FILE = "settings.json"
-
-
 def load_settings():
-    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS
+    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS, NEXT_UPDATE_CHECK
     config = configparser.ConfigParser()
 
     if os.path.exists(CONFIG_FILE):
@@ -1252,6 +1326,7 @@ def load_settings():
                 CURRENT_ENGINE = config["DEFAULT"].get("currentengine", CURRENT_ENGINE)
         except Exception as e:
             print(f" Fehler beim Laden der config.ini: {e}")
+            NEXT_UPDATE_CHECK = config.get("SETTINGS", "NextUpdateCheck", fallback="")
 
 
 def save_settings():
@@ -1264,11 +1339,143 @@ def save_settings():
             "debugmode": str(DEBUG_MODE),
             "currentengine": str(CURRENT_ENGINE),
             "terminalwidth": "200",
+            "NextUpdateCheck": NEXT_UPDATE_CHECK,
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as configfile:
             config.write(configfile)
     except Exception as e:
         print(f" Fehler beim Speichern der config.ini: {e}")
+
+
+def check_for_launcher_update(auto=False):
+    global NEXT_UPDATE_CHECK
+
+    # Wenn es ein Auto-Check ist, prüfe, ob heute schon der Tag X ist
+    if auto and NEXT_UPDATE_CHECK:
+        try:
+            next_check = datetime.datetime.strptime(
+                NEXT_UPDATE_CHECK, "%Y-%m-%d"
+            ).date()
+            if datetime.date.today() < next_check:
+                return  # Die 5 Tage (oder 7 Tage) sind noch nicht um -> Abbruch!
+        except:
+            pass
+
+    if not auto:
+        print(f"\n  {Colors.CYAN}[*] Prüfe auf Launcher-Updates...{Colors.WHITE}")
+
+    try:
+        req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            remote_code = response.read().decode("utf-8")
+
+        match = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', remote_code)
+        if match:
+            remote_version = match.group(1)
+
+            if remote_version != APP_VERSION:
+                print(
+                    f"\n  {Colors.GREEN}[+] Neues Launcher-Update gefunden! (Version {remote_version}){Colors.WHITE}"
+                )
+                print(
+                    f"  {Colors.GRAY}Deine aktuelle Version: {APP_VERSION}{Colors.WHITE}"
+                )
+                choice = (
+                    input(
+                        f"  {Colors.YELLOW}Möchtest du das Update jetzt installieren? (j/n): {Colors.WHITE}"
+                    )
+                    .strip()
+                    .lower()
+                )
+
+                if choice == "j":
+                    script_path = os.path.abspath(sys.argv[0])
+                    backup_path = f"{script_path}.bak_v{APP_VERSION}"
+
+                    # 1. Backup erstellen
+                    shutil.copy2(script_path, backup_path)
+                    print(
+                        f"  {Colors.MAGENTA}[*] Backup deiner aktuellen Version erstellt: {os.path.basename(backup_path)}{Colors.WHITE}"
+                    )
+
+                    with open(script_path, "w", encoding="utf-8") as f:
+                        f.write(remote_code)
+
+                    print(f"  {Colors.GREEN}[+] Update erfolgreich!{Colors.WHITE}")
+                    print(
+                        f"  {Colors.YELLOW}[!] Der Launcher startet sich nun neu...{Colors.WHITE}"
+                    )
+                    time.sleep(3)
+                    sys.exit(0)
+                else:
+                    next_date = datetime.date.today() + datetime.timedelta(days=5)
+                    NEXT_UPDATE_CHECK = next_date.strftime("%Y-%m-%d")
+                    save_settings()
+                    print(
+                        f"  {Colors.YELLOW}[!] Update übersprungen. Nächste Erinnerung am {NEXT_UPDATE_CHECK}.{Colors.WHITE}"
+                    )
+                    time.sleep(2)
+            else:
+                if auto:
+                    next_date = datetime.date.today() + datetime.timedelta(days=7)
+                    NEXT_UPDATE_CHECK = next_date.strftime("%Y-%m-%d")
+                    save_settings()
+                else:
+                    print(
+                        f"  {Colors.GREEN}[+] Du nutzt bereits die aktuellste Version ({APP_VERSION}).{Colors.WHITE}"
+                    )
+                    time.sleep(2)
+        else:
+            if not auto:
+                print(
+                    f"  {Colors.RED}[!] Konnte Versionsnummer auf dem Server nicht finden.{Colors.WHITE}"
+                )
+                time.sleep(2)
+    except Exception as e:
+        if not auto:
+            print(f"  {Colors.RED}[!] Fehler beim Update-Check: {e}{Colors.WHITE}")
+            time.sleep(2)
+
+
+def rollback_launcher():
+    script_path = os.path.abspath(sys.argv[0])
+    backup_files = glob.glob(f"{script_path}.bak_v*")
+
+    if not backup_files:
+        print(
+            f"\n  {Colors.YELLOW}[!] Keine Backups für einen Rollback gefunden.{Colors.WHITE}"
+        )
+        input(f"  {Colors.GRAY}Drücke ENTER zum Fortfahren...{Colors.WHITE}")
+        return
+
+    print(f"\n  {Colors.CYAN}--- ROLLBACK: VERFÜGBARE BACKUPS ---{Colors.WHITE}")
+    for i, backup in enumerate(backup_files):
+        print(f"  [{i+1}] {os.path.basename(backup)}")
+    print(f"  [0] Abbrechen")
+
+    choice = input(
+        f"\n  {Colors.YELLOW}Wähle ein Backup zum Wiederherstellen (0-{len(backup_files)}): {Colors.WHITE}"
+    ).strip()
+
+    if choice.isdigit():
+        idx = int(choice)
+        if idx == 0:
+            return
+        if 1 <= idx <= len(backup_files):
+            selected_backup = backup_files[idx - 1]
+            shutil.copy2(script_path, f"{script_path}.broken")
+            shutil.copy2(selected_backup, script_path)
+            print(
+                f"  {Colors.GREEN}[+] Rollback erfolgreich auf {os.path.basename(selected_backup)} durchgeführt!{Colors.WHITE}"
+            )
+            print(
+                f"  {Colors.YELLOW}[!] Der Launcher wird nun beendet. Bitte neu starten!{Colors.WHITE}"
+            )
+            time.sleep(3)
+            sys.exit(0)
+
+    print(f"  {Colors.RED}[!] Ungültige Eingabe.{Colors.WHITE}")
+    time.sleep(1)
 
 
 def main():
@@ -1316,6 +1523,7 @@ def main():
         resize_terminal(terminal_width, 60)
         term_width = os.get_terminal_size().columns - 2
         clear_screen()
+        check_for_launcher_update(auto=True)
         os.system(f"title UZDoom Launcher - Python Edition")
 
         total_seconds = get_total_seconds()
@@ -1429,7 +1637,7 @@ def main():
             else ""
         )
 
-        print(f"\n {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
+        print(f" {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
 
         m_on = (
             f"{Colors.GREEN}ON{Colors.WHITE}"
@@ -1525,7 +1733,7 @@ def main():
             else:
                 last_error = f"ID '{target_id}' nicht gefunden!"
                 continue
-        if choice.endswith("m") and len(choice) > 1:
+        if choice.endswith("m") and len(choice) > 1 and choice != "/m":
             target_id = choice[:-1].upper()
             if toggle_mod_skip(target_id):
                 continue
@@ -1540,6 +1748,15 @@ def main():
                 last_error = f"ID '{target_id}' nicht gefunden!"
                 continue
 
+        if choice == "/u":
+            check_for_launcher_update(auto=False)
+            continue
+        if choice == "/r":
+            rollback_launcher()
+            continue
+        if choice == "/u":
+            update_launcher()
+            continue
         if choice == "/m":
             USE_MODS = not USE_MODS
             save_settings()
