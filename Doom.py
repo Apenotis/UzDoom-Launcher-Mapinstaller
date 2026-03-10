@@ -13,7 +13,6 @@ import sys
 import time
 import urllib.request
 import zipfile
-from datetime import datetime
 
 APP_VERSION = "1.0"
 UPDATE_URL = "https://raw.githubusercontent.com/Apenotis/UzDoom-Launcher-Mapinstaller/main/Doom.py"
@@ -1315,22 +1314,21 @@ def download_idgames(file_data):
 def load_settings():
     global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS, NEXT_UPDATE_CHECK
     config = configparser.ConfigParser()
-
     if os.path.exists(CONFIG_FILE):
         try:
-            config.read(CONFIG_FILE)
+            config.read(CONFIG_FILE, encoding="utf-8")
             if "DEFAULT" in config:
                 SHOW_STATS = config["DEFAULT"].getboolean("showstats", SHOW_STATS)
                 USE_MODS = config["DEFAULT"].getboolean("usemods", USE_MODS)
                 DEBUG_MODE = config["DEFAULT"].getboolean("debugmode", DEBUG_MODE)
                 CURRENT_ENGINE = config["DEFAULT"].get("currentengine", CURRENT_ENGINE)
+                NEXT_UPDATE_CHECK = config["DEFAULT"].get("nextupdatecheck", "")
         except Exception as e:
             print(f" Fehler beim Laden der config.ini: {e}")
-            NEXT_UPDATE_CHECK = config.get("SETTINGS", "NextUpdateCheck", fallback="")
 
 
 def save_settings():
-    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS
+    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS, NEXT_UPDATE_CHECK
     try:
         config = configparser.ConfigParser()
         config["DEFAULT"] = {
@@ -1339,7 +1337,7 @@ def save_settings():
             "debugmode": str(DEBUG_MODE),
             "currentengine": str(CURRENT_ENGINE),
             "terminalwidth": "200",
-            "NextUpdateCheck": NEXT_UPDATE_CHECK,
+            "nextupdatecheck": NEXT_UPDATE_CHECK,
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as configfile:
             config.write(configfile)
@@ -1349,15 +1347,13 @@ def save_settings():
 
 def check_for_launcher_update(auto=False):
     global NEXT_UPDATE_CHECK
+    import datetime as dt
 
-    # Wenn es ein Auto-Check ist, prüfe, ob heute schon der Tag X ist
     if auto and NEXT_UPDATE_CHECK:
         try:
-            next_check = datetime.datetime.strptime(
-                NEXT_UPDATE_CHECK, "%Y-%m-%d"
-            ).date()
-            if datetime.date.today() < next_check:
-                return  # Die 5 Tage (oder 7 Tage) sind noch nicht um -> Abbruch!
+            next_check = dt.datetime.strptime(NEXT_UPDATE_CHECK, "%Y-%m-%d").date()
+            if dt.date.today() < next_check:
+                return
         except:
             pass
 
@@ -1369,11 +1365,17 @@ def check_for_launcher_update(auto=False):
         with urllib.request.urlopen(req, timeout=5) as response:
             remote_code = response.read().decode("utf-8")
 
-        match = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', remote_code)
+        match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', remote_code)
         if match:
             remote_version = match.group(1)
 
             if remote_version != APP_VERSION:
+                if auto:
+                    print(
+                        f"\n  {Colors.YELLOW}[!] Launcher-Update (v{remote_version}) verfügbar! Nutze /u um es zu installieren.{Colors.WHITE}"
+                    )
+                    time.sleep(2)
+
                 print(
                     f"\n  {Colors.GREEN}[+] Neues Launcher-Update gefunden! (Version {remote_version}){Colors.WHITE}"
                 )
@@ -1392,14 +1394,13 @@ def check_for_launcher_update(auto=False):
                     script_path = os.path.abspath(sys.argv[0])
                     backup_path = f"{script_path}.bak_v{APP_VERSION}"
 
-                    # 1. Backup erstellen
                     shutil.copy2(script_path, backup_path)
                     print(
                         f"  {Colors.MAGENTA}[*] Backup deiner aktuellen Version erstellt: {os.path.basename(backup_path)}{Colors.WHITE}"
                     )
 
-                    remote_code_fixed = remote_code.replace('\r\n', '\n')
-                    with open(script_path, 'w', encoding='utf-8') as f:
+                    remote_code_fixed = remote_code.replace("\r\n", "\n")
+                    with open(script_path, "w", encoding="utf-8") as f:
                         f.write(remote_code_fixed)
 
                     print(f"  {Colors.GREEN}[+] Update erfolgreich!{Colors.WHITE}")
@@ -1409,7 +1410,7 @@ def check_for_launcher_update(auto=False):
                     time.sleep(3)
                     sys.exit(0)
                 else:
-                    next_date = datetime.date.today() + datetime.timedelta(days=5)
+                    next_date = dt.date.today() + dt.timedelta(days=5)
                     NEXT_UPDATE_CHECK = next_date.strftime("%Y-%m-%d")
                     save_settings()
                     print(
@@ -1418,7 +1419,7 @@ def check_for_launcher_update(auto=False):
                     time.sleep(2)
             else:
                 if auto:
-                    next_date = datetime.date.today() + datetime.timedelta(days=7)
+                    next_date = dt.date.today() + dt.timedelta(days=7)
                     NEXT_UPDATE_CHECK = next_date.strftime("%Y-%m-%d")
                     save_settings()
                 else:
