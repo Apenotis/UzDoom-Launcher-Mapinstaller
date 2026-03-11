@@ -1,5 +1,6 @@
 import configparser
 import csv
+import ctypes
 import datetime
 import glob
 import json
@@ -121,6 +122,7 @@ DEFAULT_ENGINE = "uzdoom"
 CURRENT_ENGINE = DEFAULT_ENGINE
 CONFIG_FILE = "config.ini"
 SUPPORTED_ENGINES = ["uzdoom", "gzdoom", "zandronum", "zdoom", "lzdoom"]
+ENGINE_V_CACHE = ""
 
 
 def toggle_map_clear(map_id):
@@ -271,12 +273,12 @@ def uninstall_map(map_id):
         except Exception as e:
             print(f"  {Colors.RED}Konnte Ordner nicht löschen: {e}{Colors.WHITE}")
 
-    for root, dirs, files in os.walk(PWAD_DIR):
+    for root, _, files in os.walk(PWAD_DIR):
         for f in files:
             if f.lower() == filename.lower():
                 try:
                     os.remove(os.path.join(root, f))
-                except Exception as e:
+                except Exception:
                     pass
 
     try:
@@ -306,15 +308,6 @@ def check_update():
     except Exception:
         return False, CUR_VERSION
 
-
-def update_launcher():
-    if UPDATE_URL == "HIER_KOMMT_DEIN_GITHUB_RAW_LINK_REIN":
-        print(
-            f"\n  {Colors.YELLOW}[!] Update-URL noch nicht eingerichtet.{Colors.WHITE}"
-        )
-        time.sleep(2)
-        return
-
     print(f"\n  {Colors.CYAN}[*] Prüfe auf Launcher-Updates...{Colors.WHITE}")
     try:
         import re
@@ -343,7 +336,6 @@ def update_launcher():
                     .lower()
                 )
                 if choice == "j":
-                    # 1. BACKUP ERSTELLEN
                     script_path = os.path.abspath(sys.argv[0])
                     backup_path = f"{script_path}.bak_v{APP_VERSION}"
                     shutil.copy2(script_path, backup_path)
@@ -413,7 +405,7 @@ def update_csv_playtime(target_id, add_minutes):
 def get_next_id(game_type):
     if not os.path.exists(CSV_FILE):
         return (
-            "1" if game_type == "DOOM" else (f"H1" if game_type == "HERETIC" else "HX1")
+            "1" if game_type == "DOOM" else ("H1" if game_type == "HERETIC" else "HX1")
         )
 
     prefix = ""
@@ -441,7 +433,7 @@ def get_next_id(game_type):
                     ids.append(int(id_val))
             else:
                 if id_val.startswith(prefix):
-                    num_part = id_val[len(prefix) :]
+                    num_part = id_val[len(prefix) :]  # noqa: E203
                     if num_part.isdigit():
                         ids.append(int(num_part))
 
@@ -451,7 +443,6 @@ def get_next_id(game_type):
 
 def run_installer():
     INSTALL_DIR = os.path.join(BASE_DIR, "Install")
-    target_csv = CSV_FILE
 
     if not os.path.exists(INSTALL_DIR):
         os.makedirs(INSTALL_DIR)
@@ -596,10 +587,10 @@ def run_installer():
                         m_core = "tnt.wad"
                     elif "doom.wad" in content:
                         m_core = "doom.wad"
-            except Exception as e:
+            except Exception:
                 pass
 
-        kat, pref = (
+        kat, _ = (
             ("EXTRA", "H")
             if "heretic" in m_core
             else (("EXTRA", "HX") if "hexen" in m_core else ("PWAD", "D"))
@@ -837,7 +828,7 @@ def initial_setup():
     if not os.path.exists(UZ):
         print(f"  {Colors.RED}[!] WICHTIG: UzDoom Engine fehlt!{Colors.WHITE}")
         dl_choice = (
-            input(f"      Möchtest du UZDoom jetzt automatisch herunterladen? (j/n): ")
+            input("      Möchtest du UZDoom jetzt automatisch herunterladen? (j/n): ")
             .strip()
             .lower()
         )
@@ -907,8 +898,41 @@ def fetch_folder_files(folder_name):
                 d = [d]
 
             return f, d
-    except Exception as e:
+    except Exception:
         return [], []
+
+
+def get_version_of_engine(engine_path):
+    if not engine_path or not os.path.exists(engine_path):
+        return "N/A"
+
+    try:
+        filename = os.path.abspath(engine_path)
+
+        size = ctypes.windll.version.GetFileVersionInfoSizeW(filename, None)
+        if size <= 0:
+            return "Bereit"
+
+        res = ctypes.create_string_buffer(size)
+        ctypes.windll.version.GetFileVersionInfoW(filename, None, size, res)
+
+        fixed_info = ctypes.POINTER(ctypes.c_uint16)()
+        fixed_size = ctypes.c_uint()
+
+        if ctypes.windll.version.VerQueryValueW(
+            res, "\\", ctypes.byref(fixed_info), ctypes.byref(fixed_size)
+        ):
+            if fixed_size.value:
+                major = fixed_info[9]
+                minor = fixed_info[8]
+                build = fixed_info[11]
+                return f"{major}.{minor}.{build}"
+
+        mtime = os.path.getmtime(engine_path)
+        return datetime.fromtimestamp(mtime).strftime("%d.%m.%y")
+
+    except Exception:
+        return "Aktiv"
 
 
 def get_engine_path():
@@ -926,7 +950,7 @@ def get_engine_path():
 
 
 def select_engine():
-    global CURRENT_ENGINE
+    global CURRENT_ENGINE, ENGINE_V_CACHE
     while True:
         clear_screen()
         print(f"\n  {Colors.MAGENTA}--- ENGINE-AUSWAHL ---{Colors.WHITE}")
@@ -947,13 +971,21 @@ def select_engine():
             found.append(eng)
 
         print(f"\n  {Colors.YELLOW}[0]{Colors.WHITE} Zurück")
-        choice = input(f"\n  Wahl: ").strip()
+        choice = input("\n  Wahl: ").strip()
 
         if choice == "0" or not choice:
             break
+
         if choice.isdigit() and 0 < int(choice) <= len(found):
             CURRENT_ENGINE = found[int(choice) - 1]
             save_settings()
+
+            ENGINE_V_CACHE = get_version_of_engine(get_engine_path())
+
+            print(
+                f"\n  {Colors.GREEN}[+] Engine auf {CURRENT_ENGINE} gewechselt!{Colors.WHITE}"
+            )
+            time.sleep(1)
             break
 
 
@@ -961,13 +993,13 @@ def get_installed_pwads():
     installed = []
 
     if os.path.exists(PWAD_DIR):
-        for root, dirs, files in os.walk(PWAD_DIR):
+        for root, _, files in os.walk(PWAD_DIR):
             for f in files:
                 if f.lower().endswith((".wad", ".pk3", ".zip", ".pk7")):
                     installed.append(f.lower())
 
     if os.path.exists(IWAD_DIR):
-        for root, dirs, files in os.walk(IWAD_DIR):
+        for root, _, files in os.walk(IWAD_DIR):
             for f in files:
                 if f.lower().endswith((".wad", ".pk3")):
                     installed.append(f.lower())
@@ -984,14 +1016,14 @@ def search_doomworld():
     print(f"  [{Colors.YELLOW}4{Colors.WHITE}] Heretic Wads (Top Rated)")
     print(f"  [{Colors.YELLOW}5{Colors.WHITE}] Hexen Wads (Top Rated)")
 
-    choice = input(f"\n  Option wählen (ENTER zum Abbruch): ").strip()
+    choice = input("\n  Option wählen (ENTER zum Abbruch): ").strip()
     if not choice:
         return
 
     all_results = []
 
     if choice == "1":
-        query = input(f"  Suchbegriff: ").strip()
+        query = input("  Suchbegriff: ").strip()
         if not query:
             return
         url = f"https://www.doomworld.com/idgames/api/api.php?action=search&query={urllib.parse.quote(query)}&type=title&sort=rating&dir=desc&out=json"
@@ -1003,7 +1035,7 @@ def search_doomworld():
                 if res is None:
                     res = []
                 all_results = [res] if isinstance(res, dict) else res
-        except Exception as e:
+        except Exception:
             pass
 
     elif choice in ["2", "3", "4", "5"]:
@@ -1089,12 +1121,12 @@ def search_doomworld():
             try:
                 size_bytes = int(res.get("size", 0))
                 size_mb = f"{size_bytes / (1024*1024):.1f} MB"
-            except Exception as e:
+            except Exception:
                 size_mb = "?? MB"
 
             try:
                 r_val = float(res.get("rating", 0) or 0)
-            except Exception as e:
+            except Exception:
                 r_val = 0.0
 
             stars = "★" * int(r_val)
@@ -1205,7 +1237,7 @@ def download_idgames(file_data):
         print(
             f"\n  {Colors.YELLOW}[Info]{Colors.WHITE} '{folder_name}' existiert bereits im {FINAL_DIR}-Ordner."
         )
-        if input(f"  Überschreiben? (j/N): ").lower() != "j":
+        if input("  Überschreiben? (j/N): ").lower() != "j":
             return
 
     is_already_in_csv = False
@@ -1298,13 +1330,13 @@ def download_idgames(file_data):
         try:
             if "zip_temp_path" in locals() and os.path.exists(zip_temp_path):
                 os.remove(zip_temp_path)
-        except Exception as e:
+        except Exception:
             pass
 
         try:
             if "temp_extract_path" in locals() and os.path.exists(temp_extract_path):
                 shutil.rmtree(temp_extract_path)
-        except Exception as e:
+        except Exception:
             pass
         input(
             f"\n  {Colors.YELLOW}Drücke ENTER, um ins Menü zurückzukehren...{Colors.WHITE}"
@@ -1312,7 +1344,7 @@ def download_idgames(file_data):
 
 
 def load_settings():
-    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS, NEXT_UPDATE_CHECK
+    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS, NEXT_UPDATE_CHECK, ENGINE_V_CACHE
     config = configparser.ConfigParser()
     if os.path.exists(CONFIG_FILE):
         try:
@@ -1326,9 +1358,10 @@ def load_settings():
         except Exception as e:
             print(f" Fehler beim Laden der config.ini: {e}")
 
+    ENGINE_V_CACHE = get_version_of_engine(get_engine_path())
+
 
 def save_settings():
-    global CURRENT_ENGINE, USE_MODS, DEBUG_MODE, SHOW_STATS, NEXT_UPDATE_CHECK
     try:
         config = configparser.ConfigParser()
         config["DEFAULT"] = {
@@ -1354,7 +1387,7 @@ def check_for_launcher_update(auto=False):
             next_check = dt.datetime.strptime(NEXT_UPDATE_CHECK, "%Y-%m-%d").date()
             if dt.date.today() < next_check:
                 return
-        except:
+        except Exception:
             pass
 
     if not auto:
@@ -1371,9 +1404,7 @@ def check_for_launcher_update(auto=False):
 
             if remote_version != APP_VERSION:
                 if auto:
-                    print(
-                        f"\n  {Colors.YELLOW}[!] Launcher-Update (v{remote_version}) verfügbar! Nutze /u um es zu installieren.{Colors.WHITE}"
-                    )
+                    pass
                     time.sleep(2)
 
                 print(
@@ -1416,7 +1447,8 @@ def check_for_launcher_update(auto=False):
                     print(
                         f"  {Colors.YELLOW}[!] Update übersprungen. Nächste Erinnerung am {NEXT_UPDATE_CHECK}.{Colors.WHITE}"
                     )
-                    time.sleep(2)
+                    time.sleep(1)
+                    clear_screen()
             else:
                 if auto:
                     next_date = dt.date.today() + dt.timedelta(days=7)
@@ -1453,7 +1485,7 @@ def rollback_launcher():
     print(f"\n  {Colors.CYAN}--- ROLLBACK: VERFÜGBARE BACKUPS ---{Colors.WHITE}")
     for i, backup in enumerate(backup_files):
         print(f"  [{i+1}] {os.path.basename(backup)}")
-    print(f"  [0] Abbrechen")
+    print("  [0] Abbrechen")
 
     choice = input(
         f"\n  {Colors.YELLOW}Wähle ein Backup zum Wiederherstellen (0-{len(backup_files)}): {Colors.WHITE}"
@@ -1481,11 +1513,10 @@ def rollback_launcher():
 
 
 def main():
-    global SHOW_STATS, USE_MODS, DEBUG_MODE, terminal_width, CURRENT_ENGINE
+    global SHOW_STATS, USE_MODS, DEBUG_MODE, terminal_width
 
     initial_setup()
-
-    update_available, latest_version = check_update()
+    update_available = check_update()
     last_error = ""
 
     while True:
@@ -1510,9 +1541,9 @@ def main():
             max_l = 0
             for item in col:
                 if item and item[0] != "EMPTY":
-                    l = real_len(item[0])
-                    if l > max_l:
-                        max_l = l
+                    item_len = real_len(item[0])
+                    if item_len > max_l:
+                        max_l = item_len
             return max_l
 
         w1 = max(25, get_max_len(col1) + 4)
@@ -1526,17 +1557,11 @@ def main():
         term_width = os.get_terminal_size().columns - 2
         clear_screen()
         check_for_launcher_update(auto=True)
-        os.system(f"title UZDoom Launcher - Python Edition")
+        os.system("title UZDoom Launcher - Python Edition")
 
         total_seconds = get_total_seconds()
         display_time = format_time(total_seconds)
         last_id = get_last_played()
-        last_name = ""
-
-        for block in blocks.values():
-            for item in block:
-                if item and item[0] != "EMPTY" and item[1] == last_id:
-                    last_name = item[3]
 
         def format_head(text, width):
             padding_needed = width - real_len(text)
@@ -1658,39 +1683,27 @@ def main():
         )
 
         len_extra = len([x for x in col4_raw if x[0] != "EMPTY"])
-        st_left = (
+        upd_marker = " [U]" if (update_available and CURRENT_ENGINE == "UZDoom") else ""
+
+        status_bar = (
             f"    KARTEN: {Colors.GREEN}Gesamt: {total_maps}{Colors.WHITE} | "
             f"{Colors.RED}IWAD: {len(col1)}{Colors.WHITE} | "
             f"{Colors.GREEN}PWAD: {len(pwads)}{Colors.WHITE} | "
             f"{Colors.CYAN}Heretic / Hexen: {len_extra}{Colors.WHITE}  "
             f"{Colors.GRAY}│{Colors.WHITE}  {Colors.YELLOW}ZEIT: {display_time}{Colors.WHITE}  "
             f"{Colors.GRAY}│{Colors.WHITE}  MODS: {Colors.YELLOW}{mod_count}{Colors.WHITE}  "
-            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.BLUE}UZDoom {CUR_VERSION}{upd_marker}{Colors.WHITE}"
-        )
-
-        st_right = (
-            f" {Colors.YELLOW}[/M] Mod-Menu {m_on}  "
+            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.BLUE}{CURRENT_ENGINE} {ENGINE_V_CACHE}{upd_marker}{Colors.WHITE} "
+            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.MAGENTA}Launcher v{APP_VERSION}{Colors.WHITE}  "
+            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.YELLOW}[/M] Mod-Menu {m_on}  "
             f"[/S] Statistiken {s_on}  "
-            f"[/D] DebugMenu {d_on}{Colors.WHITE}    "
+            f"[/D] DebugMenu {d_on}{Colors.WHITE}"
         )
 
-        raw_l = f"    KARTEN: Gesamt: {total_maps} | IWAD: {len(col1)} | PWAD: {len(pwads)} | Heretic / Hexen: {len_extra}  │  ZEIT: {display_time}  │  MODS: {mod_count}  │  UZDoom {CUR_VERSION}{' [U]' if update_available else ''}"
-        raw_r = f" [/M] Mod-Menu {'ON' if USE_MODS else 'OFF'}  [/S] Statistiken {'ON' if SHOW_STATS else 'OFF'}  [/D] DebugMenu {'ON' if DEBUG_MODE else 'OFF'}    "
-
-        pad_stat = term_width - len(raw_l) - len(raw_r)
-
-        if pad_stat < 1:
-            pad_stat = 1
-
-        print(f"{st_left}{' ' * pad_stat}{st_right}")
-        print(f" {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
+        print(status_bar)
+        print(f" {Colors.CYAN}{'=' * term_width}{Colors.WHITE}")
         print()
 
-        if last_id:
-            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld  [ID]c Erledigt  [ID]m Mod-Skip  [ID]x Löschen{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
-        else:
-            cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld  [ID]c Erledigt  [ID]m Mod-Skip  [ID]x Löschen{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
-
+        cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld  [ID]c Erledigt  [ID]m Mod-Skip  [ID]x Löschen{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
         print(cmd_line)
         print()
 
@@ -1755,9 +1768,6 @@ def main():
             continue
         if choice == "/r":
             rollback_launcher()
-            continue
-        if choice == "/u":
-            update_launcher()
             continue
         if choice == "/m":
             USE_MODS = not USE_MODS
@@ -1834,7 +1844,6 @@ def launch_game(map_data):
     map_id = map_data[0]
     mapname = map_data[2]
     core = map_data[3]
-    pwad_folder = map_data[4]
 
     _, map_id, core, mapname, remaining, _ = map_data
     core = core.replace(" ", "")
@@ -2148,7 +2157,7 @@ def analyze_session(log_file, map_id, mapname, session_seconds):
     print(
         f"{Colors.MAGENTA}========================================================{Colors.WHITE}"
     )
-    print(f"    S E S S I O N   Z U S A M M E N F A S S U N G")
+    print("    S E S S I O N   Z U S A M M E N F A S S U N G")
     print(
         f"{Colors.MAGENTA}========================================================{Colors.WHITE}\n"
     )
@@ -2157,7 +2166,7 @@ def analyze_session(log_file, map_id, mapname, session_seconds):
     m, s = divmod(session_seconds, 60)
     print(f"    Dauer:   {Colors.YELLOW}{m} Min. {s} Sek.{Colors.WHITE}\n")
 
-    print(f"    Gegenstände:")
+    print("    Gegenstände:")
     print(
         f"    - Heilung:  {Colors.GREEN}{stats['health']}{Colors.WHITE} | Rüstung: {Colors.CYAN}{stats['armor']}{Colors.WHITE}"
     )
@@ -2187,9 +2196,9 @@ if __name__ == "__main__":
     load_settings()
     try:
         main()
-    except Exception as e:
+    except Exception:
         print("\n" + "=" * 50)
-        print(f"ABSTURZ-BERICHT:")
+        print("ABSTURZ-BERICHT:")
         print("=" * 50)
         import traceback
 
