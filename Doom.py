@@ -1703,7 +1703,7 @@ def main():
         print(f" {Colors.CYAN}{'=' * term_width}{Colors.WHITE}")
         print()
 
-        cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld  [ID]c Erledigt  [ID]m Mod-Skip  [ID]x Löschen{Colors.WHITE}    {Colors.CYAN}[E] Engine: {CURRENT_ENGINE}{Colors.WHITE}"
+        cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld  [ID]c Erledigt  [ID]m Mod-Skip  [ID]x Löschen [E] Engine {Colors.WHITE}"
         print(cmd_line)
         print()
 
