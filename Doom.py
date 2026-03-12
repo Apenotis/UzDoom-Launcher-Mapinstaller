@@ -122,7 +122,7 @@ PWAD_DIR = os.path.join(BASE_DIR, "pwad")
 UZ = os.path.join(BASE_DIR, "UzDoom", "uzdoom.exe")
 CUR_VERSION = "4.14.3"
 TIME_FILE = os.path.join(BASE_DIR, "total_time.txt")
-terminal_width = 200
+terminal_width = 220
 DEFAULT_ENGINE = "uzdoom"
 CURRENT_ENGINE = DEFAULT_ENGINE
 CONFIG_FILE = "config.ini"
@@ -1543,13 +1543,16 @@ def main():
                         max_l = item_len
             return max_l
 
-        w1 = max(25, get_max_len(col1) + 8)
-        w2 = max(25, get_max_len(col2) + 8)
-        w3 = max(25, get_max_len(col3) + 8)
-        w4 = max(35, get_max_len(col4_raw) + 8)
+        w1 = max(30, get_max_len(col1) + 8)
+        w2 = max(30, get_max_len(col2) + 8)
+        w3 = max(30, get_max_len(col3) + 8)
+        w4 = max(45, get_max_len(col4_raw) + 8)
 
-        terminal_width = w1 + w2 + w3 + w4 + 12
+        calculated_width = w1 + w2 + w3 + w4 + 15
+        terminal_width = max(165, calculated_width)
+
         resize_terminal(terminal_width, 60)
+
         term_width = os.get_terminal_size().columns - 2
 
         clear_screen()
