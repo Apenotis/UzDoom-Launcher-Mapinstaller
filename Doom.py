@@ -1,7 +1,6 @@
 import configparser
 import csv
 import ctypes
-import datetime
 import glob
 import json
 import math
@@ -14,8 +13,9 @@ import sys
 import time
 import urllib.request
 import zipfile
+from datetime import datetime
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 UPDATE_URL = "https://raw.githubusercontent.com/Apenotis/UzDoom-Launcher-Mapinstaller/main/Doom.py"
 NEXT_UPDATE_CHECK = ""
 
@@ -104,6 +104,11 @@ class Colors:
     MAGENTA = "\033[95m"
     WHITE = "\033[0m"
     GRAY = "\033[90m"
+    DIM = "\033[2m"
+    RESET_DIM = "\033[22m"
+    BG_CYAN = "\033[46m"
+    BG_WHITE = "\033[47m"
+    BLACK = "\033[30m"
 
 
 SHOW_STATS = False
@@ -1520,65 +1525,116 @@ def main():
     last_error = ""
 
     while True:
-        cmd_line = ""
         blocks = load_maps()
-
-        col1 = blocks[1]
-        pwads = blocks[2]
-        col4_raw = blocks[3]
+        col1, pwads, col4_raw = blocks[1], blocks[2], blocks[3]
 
         col2, col3 = [], []
         half = math.ceil(len(pwads) / 2)
-
         for i in range(half):
             col2.append(pwads[i])
-            if i + half < len(pwads):
-                col3.append(pwads[i + half])
-            else:
-                col3.append(None)
+            col3.append(pwads[i + half] if i + half < len(pwads) else None)
 
         def get_max_len(col):
             max_l = 0
             for item in col:
                 if item and item[0] != "EMPTY":
-                    item_len = real_len(item[0])
+                    item_len = real_len(item[0].replace("__L__", "").replace("[L]", ""))
                     if item_len > max_l:
                         max_l = item_len
             return max_l
 
-        w1 = max(25, get_max_len(col1) + 4)
-        w2 = max(25, get_max_len(col2) + 4)
-        w3 = max(25, get_max_len(col3) + 4)
-        w4 = max(35, get_max_len(col4_raw) + 4)
+        w1 = max(25, get_max_len(col1) + 8)
+        w2 = max(25, get_max_len(col2) + 8)
+        w3 = max(25, get_max_len(col3) + 8)
+        w4 = max(35, get_max_len(col4_raw) + 8)
 
-        terminal_width = w1 + w2 + w3 + w4 + 15
-
+        terminal_width = w1 + w2 + w3 + w4 + 12
         resize_terminal(terminal_width, 60)
         term_width = os.get_terminal_size().columns - 2
+
         clear_screen()
         check_for_launcher_update(auto=True)
         os.system("title UZDoom Launcher - Python Edition")
 
-        total_seconds = get_total_seconds()
-        display_time = format_time(total_seconds)
+        display_time = format_time(get_total_seconds())
         last_id = get_last_played()
 
         def format_head(text, width):
-            padding_needed = width - real_len(text)
-            return text + (" " * max(0, padding_needed))
+            return text + (" " * max(0, width - real_len(text)))
 
-        h1 = format_head("I W A D S", w1)
-        h2 = format_head("P W A D S", w2)
-        h3 = format_head("P W A D S", w3)
-        h4 = "H E R E T I C / H E X E N / W O L F"
+        h1_t = f"{Colors.CYAN}IWADS{Colors.WHITE}"
+        h2_t = f"{Colors.CYAN}PWADS{Colors.WHITE}"
+        h3_t = f"{Colors.CYAN}PWADS{Colors.WHITE}"
+        h4_t = f"{Colors.CYAN}HERETIC / HEXEN / WOLFENSTEIN{Colors.WHITE}"
 
-        print(f"\n {Colors.CYAN}{'='*term_width}")
-        print(
-            f"    {Colors.WHITE}{h1} {Colors.GRAY}|{Colors.WHITE} {h2} {Colors.GRAY}|{Colors.WHITE} {h3} {Colors.GRAY}| {Colors.WHITE}{h4}"
+        header_content = (
+            f" {format_head(h1_t, w1)} {Colors.GRAY}│{Colors.WHITE} "
+            f"{format_head(h2_t, w2)} {Colors.GRAY}│{Colors.WHITE} "
+            f"{format_head(h3_t, w3)} {Colors.GRAY}│{Colors.WHITE} "
+            f"{h4_t}"
         )
-        print(f" {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
+
+        i_width = term_width - 2
+        print(f"\n {Colors.GRAY}╭{'─' * i_width}╮")
+        print(
+            f" {Colors.GRAY}│{Colors.WHITE}{header_content}{' ' * max(0, i_width - real_len(header_content))}{Colors.GRAY}│"
+        )
+        print(f" {Colors.GRAY}╰{'─' * i_width}╯{Colors.WHITE}")
 
         max_idx = max(25, len(col1), len(col2), len(col3), len(col4_raw))
+
+        def format_entry_clean(item, width, l_id, name_color):
+            if not item or item[0] == "EMPTY":
+                return " " * width
+            raw_name, d_id = item[0], str(item[1])
+            d_id_padded = d_id.zfill(2)
+
+            clean_name = raw_name
+            if " - " in raw_name[:10]:
+                clean_name = raw_name.split(" - ", 1)[-1]
+            clean_name = clean_name.replace("__L__", "").replace("[L]", "").strip()
+
+            styled_text = clean_name.replace(
+                "[C]", f"{Colors.CYAN}[C]{name_color}"
+            ).replace("[M]", f"{Colors.RED}[M]{name_color}")
+
+            p_char = "→" if (l_id and str(l_id) == d_id) else " "
+            visible = f"{p_char}[{d_id_padded}] {clean_name}"
+
+            pad = width - real_len(visible)
+            return f"{Colors.CYAN}{p_char}{Colors.GRAY}[{Colors.YELLOW}{d_id_padded}{Colors.GRAY}]{name_color} {styled_text}{Colors.WHITE}{' ' * max(0, pad)}"
+
+        for i in range(max_idx):
+            d1, d2, d3, d4 = (
+                col1[i] if i < len(col1) else None,
+                col2[i] if i < len(col2) else None,
+                col3[i] if i < len(col3) else None,
+                col4_raw[i] if i < len(col4_raw) else None,
+            )
+
+            r1 = format_entry_clean(d1, w1, last_id, Colors.RED)
+            r2 = format_entry_clean(d2, w2, last_id, Colors.GREEN)
+            r3 = format_entry_clean(d3, w3, last_id, Colors.GREEN)
+
+            r4 = ""
+            if d4 and d4[0] != "EMPTY":
+                g_col = Colors.WHITE
+                if d4[-1] == 3:
+                    g_col = Colors.YELLOW
+                elif d4[-1] == 4:
+                    g_col = Colors.CYAN
+                id4, name4 = str(d4[1]), (
+                    d4[0].split(" - ", 1)[-1] if " - " in d4[0][:10] else d4[0]
+                )
+                name4 = name4.replace("__L__", "").replace("[L]", "").strip()
+                p4 = "→" if (last_id and str(last_id) == id4) else " "
+                pad4 = w4 - real_len(f"{p4}[{id4}] {name4}")
+                r4 = f"{Colors.CYAN}{p4}{Colors.GRAY}[{Colors.YELLOW}{id4}{Colors.GRAY}]{g_col} {name4}{Colors.WHITE}{' ' * max(0, pad4)}"
+
+            print(
+                f"   {r1} {Colors.GRAY}│{Colors.WHITE} {r2} {Colors.GRAY}│{Colors.WHITE} {r3} {Colors.GRAY}│{Colors.WHITE} {r4}"
+            )
+
         mod_count = 0
         for s in ["doom", "heretic", "hexen", "wolfenstein"]:
             p = os.path.join(BASE_DIR, "mods", s)
@@ -1587,85 +1643,7 @@ def main():
                     [d for d in os.listdir(p) if os.path.isdir(os.path.join(p, d))]
                 )
 
-        for i in range(max_idx):
-            c1 = col1[i][0] if i < len(col1) else ""
-            c2 = col2[i][0] if i < len(col2) and col2[i] else ""
-            c3 = col3[i][0] if i < len(col3) and col3[i] else ""
-            c4_data = col4_raw[i] if i < len(col4_raw) else None
-
-            c4 = c4_data[0] if c4_data and c4_data[0] != "EMPTY" else ""
-            b4 = c4_data[-1] if c4_data else 3
-
-            def format_col(text, width, color, is_last):
-                if not text:
-                    return " " * width
-
-                if is_last:
-                    base_text = text.replace("__L__", " [L]")
-                else:
-                    base_text = text.replace("__L__", "")
-
-                while "  [" in base_text:
-                    base_text = base_text.replace("  [", " [")
-
-                padding_needed = width - real_len(base_text)
-                if padding_needed < 0:
-                    padding_needed = 0
-                padded = base_text + (" " * padding_needed)
-
-                if is_last:
-                    padded = padded.replace(" [L]", f" {Colors.MAGENTA}[L]{color}")
-                if " [C]" in padded:
-                    padded = padded.replace(" [C]", f" {Colors.CYAN}[C]{color}")
-                if "[M]" in padded:
-                    padded = padded.replace("[M]", f"{Colors.RED}[M]{color}")
-
-                return padded
-
-            f1 = format_col(
-                c1, w1, Colors.RED, c1.startswith(last_id + " -") if last_id else False
-            )
-            f2 = format_col(
-                c2,
-                w2,
-                Colors.GREEN,
-                c2.startswith(last_id + " -") if last_id else False,
-            )
-            f3 = format_col(
-                c3,
-                w3,
-                Colors.GREEN,
-                c3.startswith(last_id + " -") if last_id else False,
-            )
-
-            c4_color = Colors.GREEN
-            if b4 == 3:
-                c4_color = Colors.YELLOW
-            elif b4 == 4:
-                c4_color = Colors.CYAN
-            elif b4 == 5:
-                c4_color = Colors.WHITE
-
-            f4 = format_col(
-                c4, w4, c4_color, c4.startswith(last_id + " -") if last_id else False
-            )
-            display4 = f"{c4_color}{f4}{Colors.WHITE}" if c4 else ""
-
-            print(
-                f"    {Colors.RED}{f1}{Colors.WHITE} {Colors.GRAY}|{Colors.WHITE} {Colors.GREEN}{f2}{Colors.WHITE} {Colors.GRAY}|{Colors.WHITE} {Colors.GREEN}{f3}{Colors.WHITE} {Colors.GRAY}| {display4}"
-            )
-
-        total_maps = (
-            len(col1) + len(pwads) + len([x for x in col4_raw if x[0] != "EMPTY"])
-        )
-        upd_marker = (
-            f" {Colors.RED}[U] Update verfügbar{Colors.WHITE}"
-            if update_available
-            else ""
-        )
-
-        print(f" {Colors.CYAN}{'='*term_width}{Colors.WHITE}")
-
+        total_m = len(col1) + len(pwads) + len([x for x in col4_raw if x[0] != "EMPTY"])
         m_on = (
             f"{Colors.GREEN}ON{Colors.WHITE}"
             if USE_MODS
@@ -1681,35 +1659,55 @@ def main():
             if DEBUG_MODE
             else f"{Colors.RED}OFF{Colors.WHITE}"
         )
-
-        len_extra = len([x for x in col4_raw if x[0] != "EMPTY"])
-        upd_marker = " [U]" if (update_available and CURRENT_ENGINE == "UZDoom") else ""
-
-        status_bar = (
-            f"    KARTEN: {Colors.GREEN}Gesamt: {total_maps}{Colors.WHITE} | "
-            f"{Colors.RED}IWAD: {len(col1)}{Colors.WHITE} | "
-            f"{Colors.GREEN}PWAD: {len(pwads)}{Colors.WHITE} | "
-            f"{Colors.CYAN}Heretic / Hexen: {len_extra}{Colors.WHITE}  "
-            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.YELLOW}ZEIT: {display_time}{Colors.WHITE}  "
-            f"{Colors.GRAY}│{Colors.WHITE}  MODS: {Colors.YELLOW}{mod_count}{Colors.WHITE}  "
-            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.BLUE}{CURRENT_ENGINE} {ENGINE_V_CACHE}{upd_marker}{Colors.WHITE} "
-            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.MAGENTA}Launcher v{APP_VERSION}{Colors.WHITE}  "
-            f"{Colors.GRAY}│{Colors.WHITE}  {Colors.YELLOW}[/M] Mod-Menu {m_on}  "
-            f"[/S] Statistiken {s_on}  "
-            f"[/D] DebugMenu {d_on}{Colors.WHITE}"
+        upd = (
+            f" {Colors.MAGENTA}[U]{Colors.WHITE}"
+            if (update_available and CURRENT_ENGINE == "UZDoom")
+            else ""
         )
 
-        print(status_bar)
-        print(f" {Colors.CYAN}{'=' * term_width}{Colors.WHITE}")
-        print()
+        p_maps = f"{Colors.CYAN}KARTEN:{Colors.WHITE}{total_m} {Colors.RED}IWAD{Colors.WHITE} {len(col1)} {Colors.GRAY}│{Colors.WHITE} {Colors.GREEN}PWAD{Colors.WHITE} {len(pwads)} {Colors.GRAY}│{Colors.WHITE} {Colors.CYAN}Heretic/Hexen{Colors.WHITE} {len([x for x in col4_raw if x[0] != 'EMPTY'])}"
+        p_time = f"{Colors.CYAN}ZEIT:{Colors.WHITE} {display_time}"
+        p_eng = f"{Colors.CYAN}ENGINE:{Colors.WHITE} {Colors.BLUE}{CURRENT_ENGINE}{Colors.WHITE} {ENGINE_V_CACHE}{upd} {Colors.GRAY}│{Colors.WHITE} {Colors.CYAN}MODS:{Colors.WHITE} {mod_count}"
+        p_mods = f"{Colors.YELLOW}[/M]{Colors.WHITE} Mod {m_on} {Colors.YELLOW}[/S]{Colors.WHITE} Stats {s_on} {Colors.YELLOW}[/D]{Colors.WHITE} Debug {d_on}"
 
-        cmd_line = f"    {Colors.YELLOW}[0] Beenden  [?] Zufall  [R] Reset  [C] Custom Map-Installer  [D] DoomWorld  [ID]c Erledigt  [ID]m Mod-Skip  [ID]x Löschen [E] Engine {Colors.WHITE}"
-        print(cmd_line)
-        print()
+        foot_core = f"{p_maps}  {Colors.GRAY}│{Colors.WHITE}  {p_time}  {Colors.GRAY}│{Colors.WHITE}  {p_eng}  {Colors.GRAY}│{Colors.WHITE}  {p_mods}"
+        f_width = term_width - 4
+        f_line = (
+            (" " * (max(0, f_width - real_len(foot_core)) // 2))
+            + foot_core
+            + (
+                " "
+                * (
+                    max(0, f_width - real_len(foot_core))
+                    - (max(0, f_width - real_len(foot_core)) // 2)
+                )
+            )
+        )
+
+        print(
+            f" {Colors.GRAY}╭{'─' * f_width}╮\n {Colors.GRAY}│{Colors.WHITE}{f_line}{Colors.GRAY}│\n {Colors.GRAY}╰{'─' * f_width}╯{Colors.WHITE}"
+        )
+
+        cmds = [
+            f"{Colors.YELLOW}[0]{Colors.WHITE} Beenden",
+            f"{Colors.YELLOW}[?]{Colors.WHITE} Zufall",
+            f"{Colors.YELLOW}[R]{Colors.WHITE} Reset",
+            f"{Colors.YELLOW}[C]{Colors.WHITE} Map-Installer",
+            f"{Colors.YELLOW}[D]{Colors.WHITE} DoomWorld",
+            f"{Colors.YELLOW}[ID]c{Colors.WHITE} Clear-Tag",
+            f"{Colors.YELLOW}[ID]m{Colors.WHITE} Mod-Skip",
+            f"{Colors.YELLOW}[ID]x{Colors.WHITE} Map delete",
+            f"{Colors.YELLOW}[E]{Colors.WHITE} Engine",
+        ]
+        print(
+            " " * max(0, (term_width - real_len("   ".join(cmds))) // 2)
+            + "   ".join(cmds)
+            + "\n"
+        )
 
         if last_error:
             print(
-                f"    {Colors.RED}Fehler: Eingabe '{Colors.YELLOW}{last_error}{Colors.RED}' ist ungültig.{Colors.WHITE}"
+                f"    {Colors.RED}Fehler: '{Colors.YELLOW}{last_error}{Colors.RED}' ungültig.{Colors.WHITE}"
             )
             last_error = ""
         else:
@@ -1717,7 +1715,7 @@ def main():
 
         choice = (
             input(
-                f"    {Colors.YELLOW}Gib die {Colors.YELLOW}ID{Colors.CYAN} {Colors.YELLOW}ein ODER ENTER für letzte Karte - {Colors.MAGENTA}{last_id}{Colors.YELLOW}): {Colors.WHITE}"
+                f"    {Colors.YELLOW}ID eingeben ODER ENTER für letzte Karte ({Colors.MAGENTA}{last_id}{Colors.YELLOW}): {Colors.WHITE}"
             )
             .strip()
             .lower()
@@ -1734,40 +1732,28 @@ def main():
                 choice = str(last_id)
             else:
                 continue
-        if choice.endswith("x") and len(choice) > 1:
-            target_id = choice[:-1].upper()
-            if uninstall_map(target_id):
-                continue
-            else:
-                last_error = f"ID '{target_id}' nicht gefunden!"
-                continue
-        if choice.endswith("c") and len(choice) > 1:
-            target_id = choice[:-1].upper()
-            if toggle_map_clear(target_id):
-                continue
-            else:
-                last_error = f"ID '{target_id}' nicht gefunden!"
-                continue
-        if choice.endswith("m") and len(choice) > 1 and choice != "/m":
-            target_id = choice[:-1].upper()
-            if toggle_mod_skip(target_id):
-                continue
-            else:
-                last_error = f"ID '{target_id}' nicht gefunden!"
-                continue
-        elif choice.startswith("m ") and len(choice) > 2:
-            target_id = choice[2:].strip().upper()
-            if toggle_mod_skip(target_id):
-                continue
-            else:
-                last_error = f"ID '{target_id}' nicht gefunden!"
-                continue
-
+        if len(choice) > 1:
+            tid = choice[:-1].upper()
+            if choice.endswith("x"):
+                if uninstall_map(tid):
+                    continue
+                else:
+                    last_error = tid
+                    continue
+            if choice.endswith("c"):
+                if toggle_map_clear(tid):
+                    continue
+                else:
+                    last_error = tid
+                    continue
+            if choice.endswith("m") and choice != "/m":
+                if toggle_mod_skip(tid):
+                    continue
+                else:
+                    last_error = tid
+                    continue
         if choice == "/u":
             check_for_launcher_update(auto=False)
-            continue
-        if choice == "/r":
-            rollback_launcher()
             continue
         if choice == "/m":
             USE_MODS = not USE_MODS
@@ -1781,59 +1767,41 @@ def main():
             DEBUG_MODE = not DEBUG_MODE
             save_settings()
             continue
-
         if choice == "r":
-            print(f"    {Colors.YELLOW}Script wird neu gestartet...{Colors.WHITE}")
             subprocess.Popen(
                 [sys.executable, os.path.join(BASE_DIR, "doom.py")],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
             sys.exit(0)
-
         if choice == "?":
-            all_valid_maps = []
-            for block in blocks.values():
-                for item in block:
-                    if item and item[0] != "EMPTY":
-                        all_valid_maps.append(item)
-
-            if all_valid_maps:
-                selected_map = random.choice(all_valid_maps)
+            all_m = [i for b in blocks.values() for i in b if i and i[0] != "EMPTY"]
+            if all_m:
+                s = random.choice(all_m)
                 print(
-                    f"\n    {Colors.MAGENTA}Zufallsauswahl: {Colors.CYAN}{selected_map[1]} - {selected_map[3]}{Colors.WHITE}"
+                    f"\n    {Colors.MAGENTA}Zufall: {Colors.CYAN}{s[1]} - {s[3]}{Colors.WHITE}"
                 )
                 time.sleep(2)
-                launch_game(selected_map)
-            else:
-                last_error = "Keine Karten für Zufallsauswahl gefunden!"
+                launch_game(s)
             continue
-
         if choice == "c":
             run_installer()
             continue
-
         if choice == "d":
             search_doomworld()
             continue
 
-        if choice == "u" and update_available:
-            os.system('start "" "https://github.com/m886/UzDoom/releases/latest"')
-            continue
-
-        selected_map = None
-        for block in blocks.values():
-            for item in block:
-                if item and item[0] != "EMPTY" and item[1].lower() == choice:
-                    selected_map = item
+        sm = None
+        for b in blocks.values():
+            for it in b:
+                if it and it[0] != "EMPTY" and it[1].lower() == choice:
+                    sm = it
                     break
-            if selected_map:
+            if sm:
                 break
-
-        if not selected_map:
+        if not sm:
             last_error = choice
             continue
-
-        launch_game(selected_map)
+        launch_game(sm)
 
 
 def launch_game(map_data):
