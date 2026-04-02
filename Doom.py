@@ -40,7 +40,7 @@ from datetime import datetime
 # KONFIGURATION & KONSTANTEN
 # ============================================================================
 
-APP_VERSION = "1.1"
+APP_VERSION = "3.0"
 UPDATE_URL = "https://raw.githubusercontent.com/Apenotis/UzDoom-Launcher-Mapinstaller/main/Doom.py"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
